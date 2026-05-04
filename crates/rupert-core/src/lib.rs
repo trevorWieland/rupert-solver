@@ -7,6 +7,7 @@
 pub mod clearance;
 pub mod error;
 pub mod eval;
+pub mod expr;
 pub mod hull2d;
 pub mod poly;
 pub mod polyid;
@@ -19,6 +20,7 @@ pub mod vec3;
 pub use clearance::{clearance, signed_distance_to_polygon};
 pub use error::CoreError;
 pub use eval::{EvalCounter, evaluate_clearance};
+pub use expr::Expr;
 pub use hull2d::{convex_hull, point_in_convex_strict};
 pub use poly::Polyhedron;
 pub use polyid::PolyId;
