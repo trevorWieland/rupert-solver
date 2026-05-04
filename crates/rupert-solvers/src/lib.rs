@@ -12,6 +12,7 @@
 pub mod face_normal_pairs;
 pub mod gosain_grimmer;
 pub mod hopf_grid;
+pub mod imperts;
 pub mod nelder_mead;
 pub mod random_quat;
 pub mod random_then_refine;
@@ -22,6 +23,7 @@ use rupert_core::Solver;
 pub use face_normal_pairs::FaceNormalPairs;
 pub use gosain_grimmer::GosainGrimmer;
 pub use hopf_grid::HopfGrid;
+pub use imperts::Imperts;
 pub use nelder_mead::NelderMead;
 pub use random_quat::RandomQuat;
 pub use random_then_refine::RandomThenRefine;
@@ -36,6 +38,7 @@ pub fn registered_solvers() -> Vec<Box<dyn Solver>> {
         Box::new(RandomThenRefine),
         Box::new(HopfGrid),
         Box::new(GosainGrimmer),
+        Box::new(Imperts),
     ]
 }
 
@@ -49,8 +52,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registered_solvers_count_is_six() {
-        assert_eq!(registered_solvers().len(), 6);
+    fn registered_solvers_count_is_seven() {
+        assert_eq!(registered_solvers().len(), 7);
     }
 
     #[test]

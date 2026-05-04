@@ -54,6 +54,18 @@ Each solver lives in `crates/rupert-solvers/src/<name>.rs`, implements `rupert_c
 
 **Cube to first solution.** Deterministic. Few hundred to ~10k evals depending on grid order.
 
+### `imperts` (v0.1.0)
+
+**Algorithm.** Port of Tom 7's `imperts.cc` from his SIGBOVIK 2025 SourceForge tree. Self-bootstrapping refiner: random-quaternion search until a positive-clearance seed is found, then an outer loop that perturbs the seed by uniform-random deltas in a `(Δq_outer, Δq_inner, Δt)` box and accepts strictly-improving steps. Adaptive box-shrink (×0.7 per flat outer iter) — explicitly NOT in upstream, where Tom's smart DFO (`cc-lib::Opt::Minimize`) handles concentration without shrinking.
+
+**v1 ↔ upstream diffs.** The upstream uses (a) Tom's cc-lib `Opt::Minimize` derivative-free black-box minimizer at `iters=2000, depth=2, attempts=100` per outer iteration (here: simple uniform random sampling, no smart DFO); (b) static box bounds Q=1.0 / T=0.5 (here: shrunk to 0.3 / 0.2 with adaptive ×0.7 decay since uniform sampling doesn't concentrate); (c) SQLite-backed seed selection from a global database (here: random-quat bootstrap each call). All deviations documented in `crates/rupert-solvers/src/imperts.rs` module header. v2 work: port (or wrap) cc-lib's `Opt::Minimize`, restore Tom's static bounds.
+
+**Excels on.** Clearance margin maximization on shapes that already have a discoverable basin: cube, octahedron, dodecahedron, icosahedron. On a fresh leaderboard run, `imperts` is the clearance leader on each of these even though it spends more evals than the basic search solvers.
+
+**Fails on.** Triakis tetrahedron, snub cube, noperthedron — same as the others. The bootstrap phase needs a positive-clearance seed; without one, refinement never starts.
+
+**Cube to first solution.** ~30 000–50 000 evals (most of which is refinement, not bootstrap). Don't compare against `random_quat`'s 30 evals; this solver is for the *clearance column*, not the *eval-count column*.
+
 ### `gosain_grimmer` (v0.1.0)
 
 **Algorithm.** Port of Gosain & Grimmer 2025 ([arXiv:2509.08190](https://arxiv.org/abs/2509.08190)). 7-parameter parametrization `x = (u, v, θ_p, φ_p, α, θ_q, φ_q)` — translation, inner spherical view + in-plane twist, outer spherical view. Steepest ascent on the clearance objective with backtracking line search; finite-difference gradient (~8 evals per gradient step). Random restarts.
