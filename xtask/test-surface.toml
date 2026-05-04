@@ -1,0 +1,21 @@
+# Per-crate test-surface declaration for `xtask check-rust-test-surface`.
+#
+# Modes:
+#   "rust"      — uses #[cfg(test)] / #[test] / proptest / insta.
+#                 Crate MAY use these freely; MUST NOT have a tests/bdd/ dir.
+#   "bdd"       — uses cucumber-rs scenarios under tests/bdd/.
+#                 Crate MUST have a tests/bdd/ dir; MAY also use #[test] for
+#                 unit-level invariants in private helpers.
+#
+# Numerical/foundation crates default to "rust"; orchestration crates default
+# to "bdd". The xtask gate enforces this distinction.
+
+[crates]
+"rupert-core" = "rust"
+"rupert-shapes" = "rust"
+"rupert-solvers" = "rust"
+"rupert-verify" = "rust"
+"rupert-bench" = "bdd"
+"rupert-leaderboard" = "bdd"
+"rupert-cli" = "bdd"
+"xtask" = "rust"

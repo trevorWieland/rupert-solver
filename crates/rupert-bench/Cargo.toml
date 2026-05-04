@@ -1,0 +1,38 @@
+[package]
+name = "rupert-bench"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Benchmark harness — single runs and parallel sweeps; JSONL writer."
+
+[lints]
+workspace = true
+
+[dependencies]
+rupert-core = { workspace = true }
+rupert-shapes = { workspace = true }
+rupert-solvers = { workspace = true }
+rupert-verify = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+time = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+cucumber = { workspace = true }
+futures = "0.3"
+rupert-shapes = { workspace = true }
+rupert-solvers = { workspace = true }
+serde_json = { workspace = true }
+
+[[test]]
+name = "bdd"
+path = "tests/bdd/main.rs"
+harness = false

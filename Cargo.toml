@@ -1,0 +1,119 @@
+[workspace]
+members = [
+  "bin/rupert-cli",
+  "crates/rupert-bench",
+  "crates/rupert-core",
+  "crates/rupert-leaderboard",
+  "crates/rupert-shapes",
+  "crates/rupert-solvers",
+  "crates/rupert-verify",
+  "xtask",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/trevorWieland/rupert-solver"
+
+[workspace.lints.rust]
+warnings = "deny"
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+unwrap_used = "deny"
+panic = "deny"
+todo = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+unimplemented = "deny"
+
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Numerical/scientific code repeatedly converts integer counts to f64,
+# uses long unseparated decimal literals, etc. These pedantic warnings
+# add noise without catching real bugs in this project's domain.
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+unreadable_literal = "allow"
+similar_names = "allow"
+many_single_char_names = "allow"
+return_self_not_must_use = "allow"
+float_cmp = "allow"
+doc_markdown = "allow"
+enum_variant_names = "allow"
+unnecessary_wraps = "allow"
+# cucumber-rs requires async step fns; the lint flags those as unused-async.
+unused_async = "allow"
+struct_field_names = "allow"
+
+[workspace.dependencies]
+# Foundation
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+
+# Math + numerics
+nalgebra = "0.33"
+rand = "0.8"
+rand_xoshiro = "0.6"
+
+# Verification (interval / exact)
+inari = "1"
+malachite = "0.4"
+
+# CLI + observability
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Concurrency
+rayon = "1"
+
+# Time / IDs
+time = { version = "0.3", features = ["serde", "formatting", "macros"] }
+blake3 = "1"
+
+# BDD (orchestration crates only)
+cucumber = "0.21"
+futures = "0.3"
+
+# Test-only
+proptest = "1"
+insta = { version = "1", features = ["json", "yaml"] }
+
+# Workspace tooling
+walkdir = "2"
+cargo_metadata = "0.18"
+toml = "0.8"
+
+# Internal crates (path deps)
+rupert-core = { path = "crates/rupert-core" }
+rupert-shapes = { path = "crates/rupert-shapes" }
+rupert-solvers = { path = "crates/rupert-solvers" }
+rupert-verify = { path = "crates/rupert-verify" }
+rupert-bench = { path = "crates/rupert-bench" }
+rupert-leaderboard = { path = "crates/rupert-leaderboard" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

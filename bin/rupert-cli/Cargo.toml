@@ -1,0 +1,41 @@
+[package]
+name = "rupert-cli"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Rupert benchmarking CLI: list / run / verify / lead."
+
+[[bin]]
+name = "rupert"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+rupert-core = { workspace = true }
+rupert-shapes = { workspace = true }
+rupert-solvers = { workspace = true }
+rupert-verify = { workspace = true }
+rupert-bench = { workspace = true }
+rupert-leaderboard = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+walkdir = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+cucumber = { workspace = true }
+futures = "0.3"
+serde_json = { workspace = true }
+tempfile = "3"
+
+[[test]]
+name = "bdd"
+path = "tests/bdd/main.rs"
+harness = false

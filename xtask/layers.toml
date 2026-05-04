@@ -1,0 +1,24 @@
+# Workspace dependency layering. `xtask check-deps` rejects any edge whose
+# target layer is greater than or equal to its source layer.
+
+[layers]
+# L0: foundation — no I/O, no infra deps.
+"rupert-core" = 0
+
+# L1: foundation that depends on rupert-core.
+"rupert-shapes" = 1
+"rupert-solvers" = 1
+"rupert-leaderboard" = 1
+
+# L2: capability that depends on rupert-shapes (verifier needs the noperthedron
+# regression case at test time, etc.).
+"rupert-verify" = 2
+
+# L3: orchestration — single-run + parallel sweep, JSONL writer.
+"rupert-bench" = 3
+
+# L4: the binary — wires everything.
+"rupert-cli" = 4
+
+# Tooling — outside the layered graph.
+"xtask" = 99

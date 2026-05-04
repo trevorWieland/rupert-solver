@@ -1,0 +1,21 @@
+# Rust build artifacts
+/target/
+lcov.info
+*.profraw
+
+# Local cargo caches (keep .cargo/config.toml tracked)
+.cargo/advisory-dbs/
+.cargo/registry/
+.cargo/.global-cache
+.cargo/.package-cache
+.cargo/.package-cache-mutate
+
+# Benchmark outputs — directory is tracked via results/.gitkeep, contents are not.
+/results/*
+!/results/.gitkeep
+!/results/baseline/
+!/results/baseline/**
+
+# Editor / OS noise
+.DS_Store
+*.swp

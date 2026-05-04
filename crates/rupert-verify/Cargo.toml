@@ -1,0 +1,31 @@
+[package]
+name = "rupert-verify"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Snap-and-certify verifier. F64Epsilon path is the v1 default; interval/rational paths gated."
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# Enables exact rational verification via malachite. Off by default — v1 only
+# wires the F64Epsilon path for the orchestration loop.
+exact = ["dep:malachite"]
+# Enables interval-arithmetic verification via inari. Off by default.
+interval = ["dep:inari"]
+
+[dependencies]
+rupert-core = { workspace = true }
+rupert-shapes = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+inari = { workspace = true, optional = true }
+malachite = { workspace = true, optional = true }
+
+[dev-dependencies]
+rupert-solvers = { workspace = true }

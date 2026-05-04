@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  ci:
+    name: just ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install mold
+        run: sudo apt-get install -y mold clang
+      - name: Install just
+        uses: extractions/setup-just@v2
+      - name: Install cargo tools
+        run: |
+          cargo install --locked cargo-binstall
+          cargo binstall --no-confirm cargo-nextest cargo-deny cargo-machete taplo-cli
+      - name: just ci
+        run: just ci

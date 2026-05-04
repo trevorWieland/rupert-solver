@@ -1,0 +1,21 @@
+[package]
+name = "rupert-shapes"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Builtin polyhedron catalog (cube, tetrahedron, snub cube, noperthedron, etc.) and JSON I/O."
+
+[lints]
+workspace = true
+
+[dependencies]
+rupert-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
