@@ -85,5 +85,6 @@ GPU kernels, SDP / Lasserre hierarchies, autodiff, LP scale-oracle (translation 
 - `docs/porting.md` — translating an external solver into `rupert-solvers/src/<name>.rs`.
 - `docs/adding-a-solver.md` — minimal new-solver template.
 - `docs/architecture.md` — crate graph rationale + future-roadmap.
+- `docs/v2-algebraic-coords.md` — design notes for the algebraic-coordinate DSL that unlocks the snub cube + dodecahedron + noperthedron interval-verification paths. Read before starting any v2 verifier work.
 
 The plan that birthed this scaffold lives at `~/.claude/plans/virtual-booping-graham.md` (read-only context). The arXiv references are in the project README.
