@@ -12,10 +12,26 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
-    pub const X: Self = Self { x: 1.0, y: 0.0, z: 0.0 };
-    pub const Y: Self = Self { x: 0.0, y: 1.0, z: 0.0 };
-    pub const Z: Self = Self { x: 0.0, y: 0.0, z: 1.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const X: Self = Self {
+        x: 1.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    pub const Y: Self = Self {
+        x: 0.0,
+        y: 1.0,
+        z: 0.0,
+    };
+    pub const Z: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 1.0,
+    };
 
     #[inline]
     pub const fn new(x: f64, y: f64, z: f64) -> Self {
@@ -50,7 +66,11 @@ impl Vec3 {
     /// — callers downstream of geometry pipelines must handle this.
     pub fn normalized(self) -> Self {
         let n = self.norm();
-        if n == 0.0 { Self::ZERO } else { self * (1.0 / n) }
+        if n == 0.0 {
+            Self::ZERO
+        } else {
+            self * (1.0 / n)
+        }
     }
 }
 

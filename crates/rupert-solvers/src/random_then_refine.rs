@@ -4,9 +4,7 @@
 
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rand_xoshiro::rand_core::SeedableRng;
-use rupert_core::{
-    Budget, Candidate, EvalCounter, Polyhedron, Solution, Solver, SolverOutcome,
-};
+use rupert_core::{Budget, Candidate, EvalCounter, Polyhedron, Solution, Solver, SolverOutcome};
 
 use crate::sample::random_unit_quat;
 
@@ -66,11 +64,7 @@ impl Solver for RandomThenRefine {
 
 /// Coordinate-descent refinement: probe each parameter ± delta, accept if
 /// it improves clearance. Cheap and effective once we're near the basin.
-fn local_refine(
-    ec: &mut EvalCounter<'_>,
-    seed: Candidate,
-    max_evals: u64,
-) -> Option<Solution> {
+fn local_refine(ec: &mut EvalCounter<'_>, seed: Candidate, max_evals: u64) -> Option<Solution> {
     let mut current = seed;
     let mut current_clearance = ec.evaluate(&current);
     let mut delta = 0.05_f64;

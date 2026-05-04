@@ -268,6 +268,9 @@ mod tests {
         let p = rupert_shapes::cube();
         let mut ec = EvalCounter::new(&p);
         let outcome = solver.solve(&p, &budget(50_000, 7), &mut ec);
-        assert!(matches!(outcome, SolverOutcome::Found(_)), "got {outcome:?}");
+        assert!(
+            matches!(outcome, SolverOutcome::Found(_)),
+            "got {outcome:?}"
+        );
     }
 }

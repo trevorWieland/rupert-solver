@@ -121,13 +121,24 @@ mod tests {
 
     use super::*;
 
-    fn certified_run(shape: &str, solver: &str, seed: u64, evals: u64, clearance: f64) -> RunResult {
+    fn certified_run(
+        shape: &str,
+        solver: &str,
+        seed: u64,
+        evals: u64,
+        clearance: f64,
+    ) -> RunResult {
         RunResult {
             schema_version: SCHEMA_VERSION,
             timestamp_utc: "x".into(),
             poly_id: *rupert_core::Polyhedron::new(
                 "p",
-                vec![rupert_core::Vec3::ZERO, rupert_core::Vec3::X, rupert_core::Vec3::Y, rupert_core::Vec3::Z],
+                vec![
+                    rupert_core::Vec3::ZERO,
+                    rupert_core::Vec3::X,
+                    rupert_core::Vec3::Y,
+                    rupert_core::Vec3::Z,
+                ],
                 vec![],
             )
             .expect("poly")
@@ -136,7 +147,10 @@ mod tests {
             solver_name: solver.into(),
             solver_version: "0.1.0".into(),
             seed,
-            budget: BudgetSnapshot { max_evaluations: 1000, max_wall_time_ms: None },
+            budget: BudgetSnapshot {
+                max_evaluations: 1000,
+                max_wall_time_ms: None,
+            },
             outcome: RunOutcome::Solved,
             eval_count: evals,
             wall_time_ms: 1,

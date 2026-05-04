@@ -26,6 +26,6 @@ pub use projection::{P2, project_xy, translate_xy};
 pub use quat::Quat;
 pub use runresult::{BudgetSnapshot, HostInfo, RunOutcome, RunResult, SCHEMA_VERSION};
 pub use solver::{
-    Budget, CertMethod, Candidate, Certification, Solution, Solver, SolverError, SolverOutcome,
+    Budget, Candidate, CertMethod, Certification, Solution, Solver, SolverError, SolverOutcome,
 };
 pub use vec3::Vec3;

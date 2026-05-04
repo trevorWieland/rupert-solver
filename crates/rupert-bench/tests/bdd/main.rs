@@ -34,13 +34,21 @@ async fn run_with_budget(w: &mut BenchWorld, budget_evals: u64) {
 #[then(regex = r"^the outcome is Solved$")]
 async fn outcome_solved(w: &mut BenchWorld) {
     let r = w.last_result.as_ref().expect("ran");
-    assert!(matches!(r.outcome, RunOutcome::Solved), "got {:?}", r.outcome);
+    assert!(
+        matches!(r.outcome, RunOutcome::Solved),
+        "got {:?}",
+        r.outcome
+    );
 }
 
 #[then(regex = r"^the outcome is Exhausted$")]
 async fn outcome_exhausted(w: &mut BenchWorld) {
     let r = w.last_result.as_ref().expect("ran");
-    assert!(matches!(r.outcome, RunOutcome::Exhausted), "got {:?}", r.outcome);
+    assert!(
+        matches!(r.outcome, RunOutcome::Exhausted),
+        "got {:?}",
+        r.outcome
+    );
 }
 
 #[then(regex = r"^the result has a certified solution$")]
@@ -76,7 +84,8 @@ async fn byte_equal_solutions(w: &mut BenchWorld) {
         let aj = serde_json::to_string(&ar.solution).expect("ser a");
         let bj = serde_json::to_string(&br.solution).expect("ser b");
         assert_eq!(
-            aj, bj,
+            aj,
+            bj,
             "non-deterministic solution for {:?}: {aj} vs {bj}",
             key(ar)
         );

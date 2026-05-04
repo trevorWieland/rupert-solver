@@ -8,7 +8,9 @@ pub enum CoreError {
     EmptyPolyhedron,
     #[error("face {face_index} has fewer than 3 vertices")]
     DegenerateFace { face_index: usize },
-    #[error("face {face_index} references vertex {vertex_index}, but only {vertex_count} vertices exist")]
+    #[error(
+        "face {face_index} references vertex {vertex_index}, but only {vertex_count} vertices exist"
+    )]
     FaceIndexOutOfRange {
         face_index: usize,
         vertex_index: usize,

@@ -32,7 +32,10 @@ async fn fresh_working_dir(w: &mut CliWorld) {
 async fn fabricate_noperthedron_lie(w: &mut CliWorld) {
     use serde_json::json;
     let dir = w.work_dir.as_ref().expect("fresh_working_dir first");
-    let path = dir.path().join("results").join("test_noperthedron_lie.jsonl");
+    let path = dir
+        .path()
+        .join("results")
+        .join("test_noperthedron_lie.jsonl");
     std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
     // Identity candidate ⇒ clearance 0 (touching shadows). The solver
     // claims clearance 1.0 with a fake certification — `rupert verify`
@@ -86,7 +89,11 @@ async fn exit_zero(w: &mut CliWorld) {
 
 #[then(regex = r"^the exit code is non-zero$")]
 async fn exit_nonzero(w: &mut CliWorld) {
-    assert_ne!(w.last_status, 0, "expected non-zero exit; stderr={}", w.last_stderr);
+    assert_ne!(
+        w.last_status, 0,
+        "expected non-zero exit; stderr={}",
+        w.last_stderr
+    );
 }
 
 #[then(regex = r#"^stdout contains "(.*)"$"#)]
@@ -109,7 +116,12 @@ async fn stderr_contains(w: &mut CliWorld, needle: String) {
 
 #[then(regex = r"^a result file exists with at least one Solved certified record$")]
 async fn certified_record_exists(w: &mut CliWorld) {
-    let dir = w.work_dir.as_ref().expect("work dir").path().join("results");
+    let dir = w
+        .work_dir
+        .as_ref()
+        .expect("work dir")
+        .path()
+        .join("results");
     let mut found = false;
     for entry in std::fs::read_dir(&dir).expect("read results") {
         let entry = entry.expect("entry");

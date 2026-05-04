@@ -34,8 +34,7 @@ pub(crate) struct RunArgs {
 }
 
 pub(crate) fn run(args: &RunArgs) -> Result<()> {
-    let max_evaluations =
-        NonZeroU64::new(args.budget_evals).context("budget-evals must be > 0")?;
+    let max_evaluations = NonZeroU64::new(args.budget_evals).context("budget-evals must be > 0")?;
     let max_wall_time = args.budget_wall_ms.map(Duration::from_millis);
     let cfg = SweepConfig {
         max_evaluations,
@@ -61,7 +60,10 @@ pub(crate) fn run(args: &RunArgs) -> Result<()> {
     let path = write_results(&args.out_dir, &results)?;
     let mut out = std::io::stdout().lock();
     writeln!(out, "wrote {} results -> {}", results.len(), path.display())?;
-    let solved = results.iter().filter(|r| matches!(r.outcome, rupert_core::RunOutcome::Solved)).count();
+    let solved = results
+        .iter()
+        .filter(|r| matches!(r.outcome, rupert_core::RunOutcome::Solved))
+        .count();
     let exhausted = results
         .iter()
         .filter(|r| matches!(r.outcome, rupert_core::RunOutcome::Exhausted))

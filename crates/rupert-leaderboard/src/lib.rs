@@ -36,15 +36,13 @@ fn read_results(dir: &Path) -> Result<Vec<RunResult>> {
         }
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "jsonl") {
-            let bytes = std::fs::read(path)
-                .with_context(|| format!("read {}", path.display()))?;
+            let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
             for (lineno, line) in bytes.split(|b| *b == b'\n').enumerate() {
                 if line.is_empty() {
                     continue;
                 }
-                let r: RunResult = serde_json::from_slice(line).with_context(|| {
-                    format!("parse {}:{}", path.display(), lineno + 1)
-                })?;
+                let r: RunResult = serde_json::from_slice(line)
+                    .with_context(|| format!("parse {}:{}", path.display(), lineno + 1))?;
                 out.push(r);
             }
         }

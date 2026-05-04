@@ -11,10 +11,8 @@ use time::OffsetDateTime;
 /// Generate a results filename of the form `run_<utc_ts>.jsonl`.
 pub fn default_filename(now: OffsetDateTime) -> String {
     // Format e.g. 20260503T193011Z — sortable, filesystem-safe.
-    let f = time::format_description::parse(
-        "[year][month][day]T[hour][minute][second]Z",
-    )
-    .expect("static format");
+    let f = time::format_description::parse("[year][month][day]T[hour][minute][second]Z")
+        .expect("static format");
     let stamp = now.format(&f).unwrap_or_else(|_| "unknown".to_string());
     format!("run_{stamp}.jsonl")
 }
@@ -64,15 +62,13 @@ pub fn read_all_results(dir: &Path) -> Result<Vec<RunResult>> {
         }
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "jsonl") {
-            let bytes = std::fs::read(path)
-                .with_context(|| format!("read {}", path.display()))?;
+            let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
             for (lineno, line) in bytes.split(|b| *b == b'\n').enumerate() {
                 if line.is_empty() {
                     continue;
                 }
-                let r: RunResult = serde_json::from_slice(line).with_context(|| {
-                    format!("parse {}:{}", path.display(), lineno + 1)
-                })?;
+                let r: RunResult = serde_json::from_slice(line)
+                    .with_context(|| format!("parse {}:{}", path.display(), lineno + 1))?;
                 out.push(r);
             }
         }
@@ -87,9 +83,7 @@ mod tests {
     use super::*;
 
     fn fake_result(seed: u64) -> RunResult {
-        use rupert_core::{
-            BudgetSnapshot, HostInfo, RunOutcome, SCHEMA_VERSION,
-        };
+        use rupert_core::{BudgetSnapshot, HostInfo, RunOutcome, SCHEMA_VERSION};
         RunResult {
             schema_version: SCHEMA_VERSION,
             timestamp_utc: "2026-05-03T00:00:00Z".to_string(),

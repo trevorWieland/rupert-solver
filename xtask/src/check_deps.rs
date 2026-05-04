@@ -37,7 +37,9 @@ pub(crate) fn run() -> Result<()> {
 
     let mut violations: Vec<String> = Vec::new();
     for pkg in metadata.workspace_packages() {
-        let src_layer = if let Some(n) = layers.get(pkg.name.as_str()) { *n } else {
+        let src_layer = if let Some(n) = layers.get(pkg.name.as_str()) {
+            *n
+        } else {
             violations.push(format!(
                 "{} is not declared in xtask/layers.toml — add an entry",
                 pkg.name
@@ -55,7 +57,9 @@ pub(crate) fn run() -> Result<()> {
             if !workspace_members.contains(dep_name) {
                 continue;
             }
-            let dst_layer = if let Some(n) = layers.get(dep_name) { *n } else {
+            let dst_layer = if let Some(n) = layers.get(dep_name) {
+                *n
+            } else {
                 violations.push(format!(
                     "{} -> {dep_name}: dependency missing from xtask/layers.toml",
                     pkg.name

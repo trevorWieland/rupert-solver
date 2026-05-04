@@ -19,7 +19,9 @@ pub const F64_EPS: f64 = 1.0e-9;
 pub enum VerifyError {
     #[error("solution clearance is non-finite")]
     NonFiniteClearance,
-    #[error("recomputed clearance {recomputed} disagrees with reported {reported} (tolerance {tol})")]
+    #[error(
+        "recomputed clearance {recomputed} disagrees with reported {reported} (tolerance {tol})"
+    )]
     ClearanceMismatch {
         recomputed: f64,
         reported: f64,
@@ -140,6 +142,9 @@ mod tests {
         };
         sol.clearance = 999.0;
         let r = certify(&sol, &poly);
-        assert!(matches!(r, Err(VerifyError::ClearanceMismatch { .. })), "got {r:?}");
+        assert!(
+            matches!(r, Err(VerifyError::ClearanceMismatch { .. })),
+            "got {r:?}"
+        );
     }
 }

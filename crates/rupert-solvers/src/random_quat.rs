@@ -5,9 +5,7 @@ use std::time::Instant;
 
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rand_xoshiro::rand_core::SeedableRng;
-use rupert_core::{
-    Budget, Candidate, EvalCounter, Polyhedron, Solution, Solver, SolverOutcome,
-};
+use rupert_core::{Budget, Candidate, EvalCounter, Polyhedron, Solution, Solver, SolverOutcome};
 
 use crate::sample::random_unit_quat;
 

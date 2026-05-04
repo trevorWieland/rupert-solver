@@ -86,7 +86,11 @@ mod tests {
             0,
             None,
         );
-        assert!(matches!(result.outcome, RunOutcome::Solved), "got {:?}", result.outcome);
+        assert!(
+            matches!(result.outcome, RunOutcome::Solved),
+            "got {:?}",
+            result.outcome
+        );
         assert!(result.solution.is_some());
         let sol = result.solution.expect("solution");
         assert!(sol.certification.is_some());

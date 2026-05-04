@@ -7,6 +7,8 @@ default:
     @just --list
 
 # One-shot first-time setup. Installs dev tools via cargo-binstall.
+# Lefthook is NOT a cargo crate — install it separately (apt, brew, npm,
+# or download the binary from github.com/evilmartians/lefthook/releases).
 bootstrap:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -14,9 +16,15 @@ bootstrap:
     if ! command -v cargo-binstall >/dev/null 2>&1; then
         cargo install cargo-binstall --locked
     fi
-    cargo binstall --no-confirm cargo-nextest cargo-deny cargo-llvm-cov cargo-machete taplo-cli lefthook
-    lefthook install
-    @echo "bootstrap: complete"
+    cargo binstall --no-confirm cargo-nextest cargo-deny cargo-llvm-cov cargo-machete taplo-cli
+    if command -v lefthook >/dev/null 2>&1; then
+        lefthook install
+    else
+        echo "lefthook not on PATH — skipping git hook setup."
+        echo "Install via: apt install lefthook | brew install lefthook |"
+        echo "             curl -sSL https://github.com/evilmartians/lefthook/releases/latest/download/lefthook_Linux_x86_64.gz | gunzip > /usr/local/bin/lefthook && chmod +x /usr/local/bin/lefthook"
+    fi
+    echo "bootstrap: complete"
 
 # All-formats formatter.
 fmt:
@@ -36,9 +44,12 @@ clippy:
 check:
     {{cargo}} check --workspace --all-targets
 
-# Run tests via nextest.
+# Run tests: nextest for libtest binaries, plain cargo test for the
+# cucumber BDD harnesses (which use harness=false and don't expose
+# nextest's --list interface).
 test:
-    {{cargo}} nextest run --workspace
+    {{cargo}} nextest run --workspace -E 'not binary(bdd)'
+    {{cargo}} test --workspace --test bdd
 
 # All workspace gates from xtask.
 xtask-all:

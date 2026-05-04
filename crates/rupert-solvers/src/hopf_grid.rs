@@ -127,6 +127,9 @@ mod tests {
         // 256 grid points × 256 = 65 536 candidates. Cube is reachable far
         // earlier; budget at 10k.
         let outcome = solver.solve(&p, &budget(10_000, 0), &mut ec);
-        assert!(matches!(outcome, SolverOutcome::Found(_)), "got {outcome:?}");
+        assert!(
+            matches!(outcome, SolverOutcome::Found(_)),
+            "got {outcome:?}"
+        );
     }
 }

@@ -22,7 +22,11 @@ pub struct EvalCounter<'a> {
 
 impl<'a> EvalCounter<'a> {
     pub fn new(poly: &'a Polyhedron) -> Self {
-        Self { poly, count: 0, _not_sync: PhantomData }
+        Self {
+            poly,
+            count: 0,
+            _not_sync: PhantomData,
+        }
     }
 
     /// Compute the clearance of `candidate` against the bound polyhedron and

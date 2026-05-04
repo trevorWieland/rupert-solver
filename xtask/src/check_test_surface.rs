@@ -44,10 +44,7 @@ pub(crate) fn run() -> Result<()> {
     for v in &violations {
         writeln!(err, "{v}")?;
     }
-    bail!(
-        "check-rust-test-surface: {} violation(s)",
-        violations.len()
-    );
+    bail!("check-rust-test-surface: {} violation(s)", violations.len());
 }
 
 fn locate_crate(root: &Path, name: &str) -> Result<std::path::PathBuf> {

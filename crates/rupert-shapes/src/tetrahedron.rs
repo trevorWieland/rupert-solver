@@ -9,12 +9,7 @@ pub fn tetrahedron() -> Polyhedron {
         Vec3::new(-1.0, 1.0, -1.0),
         Vec3::new(1.0, -1.0, -1.0),
     ];
-    let faces = vec![
-        vec![0, 1, 2],
-        vec![0, 2, 3],
-        vec![0, 3, 1],
-        vec![1, 3, 2],
-    ];
+    let faces = vec![vec![0, 1, 2], vec![0, 2, 3], vec![0, 3, 1], vec![1, 3, 2]];
     Polyhedron::new("tetrahedron", vertices, faces).expect("tetra is valid")
 }
 

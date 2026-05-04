@@ -24,9 +24,7 @@ pub(crate) fn run() -> Result<()> {
         if !dir.is_dir() {
             continue;
         }
-        for entry in std::fs::read_dir(&dir)
-            .with_context(|| format!("read {}", dir.display()))?
-        {
+        for entry in std::fs::read_dir(&dir).with_context(|| format!("read {}", dir.display()))? {
             let entry = entry?;
             if !entry.file_type()?.is_dir() {
                 continue;
@@ -57,8 +55,8 @@ pub(crate) fn run() -> Result<()> {
 }
 
 fn check_one(cargo: &std::path::Path, violations: &mut Vec<String>) -> Result<()> {
-    let text = std::fs::read_to_string(cargo)
-        .with_context(|| format!("read {}", cargo.display()))?;
+    let text =
+        std::fs::read_to_string(cargo).with_context(|| format!("read {}", cargo.display()))?;
     for required in REQUIRED_INHERITS {
         if !text.contains(required) {
             violations.push(format!(

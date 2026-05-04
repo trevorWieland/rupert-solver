@@ -67,7 +67,11 @@ mod tests {
         let mut sorted = names.clone();
         sorted.sort_unstable();
         sorted.dedup();
-        assert_eq!(sorted.len(), names.len(), "duplicate shape names: {names:?}");
+        assert_eq!(
+            sorted.len(),
+            names.len(),
+            "duplicate shape names: {names:?}"
+        );
     }
 
     #[test]

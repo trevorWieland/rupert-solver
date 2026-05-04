@@ -36,7 +36,9 @@ impl BudgetSnapshot {
     pub fn from_budget(b: &crate::solver::Budget) -> Self {
         Self {
             max_evaluations: b.max_evaluations.get(),
-            max_wall_time_ms: b.max_wall_time.map(|d| d.as_millis().min(u128::from(u64::MAX)) as u64),
+            max_wall_time_ms: b
+                .max_wall_time
+                .map(|d| d.as_millis().min(u128::from(u64::MAX)) as u64),
         }
     }
 }
@@ -61,7 +63,9 @@ pub enum RunOutcome {
 
 impl RunOutcome {
     pub fn from_solver_error(e: &SolverError) -> Self {
-        Self::Error { message: e.to_string() }
+        Self::Error {
+            message: e.to_string(),
+        }
     }
 }
 
@@ -79,7 +83,9 @@ impl HostInfo {
         Self {
             rustc: option_env!("RUSTC_SEMVER").unwrap_or("unknown").to_string(),
             target: format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
-            git_rev: option_env!("RUPERT_GIT_REV").unwrap_or("unknown").to_string(),
+            git_rev: option_env!("RUPERT_GIT_REV")
+                .unwrap_or("unknown")
+                .to_string(),
         }
     }
 }
@@ -98,7 +104,9 @@ mod tests {
 
     #[test]
     fn disqualified_carries_reason() {
-        let o = RunOutcome::Disqualified { reason: "drift".into() };
+        let o = RunOutcome::Disqualified {
+            reason: "drift".into(),
+        };
         let s = serde_json::to_string(&o).expect("serialize");
         assert!(s.contains("drift"));
     }

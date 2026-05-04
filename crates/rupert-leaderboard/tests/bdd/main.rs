@@ -40,7 +40,10 @@ fn fake_run(
         solver_name: solver.into(),
         solver_version: "0.1.0".into(),
         seed,
-        budget: BudgetSnapshot { max_evaluations: 1000, max_wall_time_ms: None },
+        budget: BudgetSnapshot {
+            max_evaluations: 1000,
+            max_wall_time_ms: None,
+        },
         outcome,
         eval_count: evals,
         wall_time_ms: 1,
@@ -72,9 +75,33 @@ async fn three_sections(w: &mut LeadWorld) {
 
 #[given(regex = r"^three certified runs for cube with non-overlapping seeds$")]
 async fn three_certified_cube(w: &mut LeadWorld) {
-    w.results.push(fake_run("cube", "rq", 0, 100, 0.10, true, RunOutcome::Solved));
-    w.results.push(fake_run("cube", "rq", 1, 50, 0.05, true, RunOutcome::Solved));
-    w.results.push(fake_run("cube", "rq", 2, 80, 0.20, true, RunOutcome::Solved));
+    w.results.push(fake_run(
+        "cube",
+        "rq",
+        0,
+        100,
+        0.10,
+        true,
+        RunOutcome::Solved,
+    ));
+    w.results.push(fake_run(
+        "cube",
+        "rq",
+        1,
+        50,
+        0.05,
+        true,
+        RunOutcome::Solved,
+    ));
+    w.results.push(fake_run(
+        "cube",
+        "rq",
+        2,
+        80,
+        0.20,
+        true,
+        RunOutcome::Solved,
+    ));
 }
 
 #[when(regex = r"^I aggregate them$")]
@@ -92,8 +119,15 @@ async fn one_row_best_50(w: &mut LeadWorld) {
 
 #[given(regex = r"^one Solved run for cube without certification$")]
 async fn solved_uncert(w: &mut LeadWorld) {
-    w.results
-        .push(fake_run("cube", "rq", 0, 100, 0.10, false, RunOutcome::Solved));
+    w.results.push(fake_run(
+        "cube",
+        "rq",
+        0,
+        100,
+        0.10,
+        false,
+        RunOutcome::Solved,
+    ));
 }
 
 #[then(regex = r"^the headline is empty and uncertified has one row$")]

@@ -12,9 +12,7 @@ pub fn convex_hull(points: &[P2]) -> Result<Vec<P2>, CoreError> {
     sorted.sort_by(|a, b| {
         a.x.partial_cmp(&b.x)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal)
-            })
+            .then_with(|| a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal))
     });
     sorted.dedup_by(|a, b| (a.x - b.x).abs() < 1e-15 && (a.y - b.y).abs() < 1e-15);
     if sorted.len() < 3 {
@@ -23,9 +21,7 @@ pub fn convex_hull(points: &[P2]) -> Result<Vec<P2>, CoreError> {
 
     let mut lower: Vec<P2> = Vec::with_capacity(sorted.len());
     for &p in &sorted {
-        while lower.len() >= 2
-            && cross(lower[lower.len() - 2], lower[lower.len() - 1], p) <= 0.0
-        {
+        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], p) <= 0.0 {
             lower.pop();
         }
         lower.push(p);
@@ -33,9 +29,7 @@ pub fn convex_hull(points: &[P2]) -> Result<Vec<P2>, CoreError> {
 
     let mut upper: Vec<P2> = Vec::with_capacity(sorted.len());
     for &p in sorted.iter().rev() {
-        while upper.len() >= 2
-            && cross(upper[upper.len() - 2], upper[upper.len() - 1], p) <= 0.0
-        {
+        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], p) <= 0.0 {
             upper.pop();
         }
         upper.push(p);
@@ -111,11 +105,7 @@ mod tests {
 
     #[test]
     fn rejects_collinear_input() {
-        let pts = vec![
-            P2::new(0.0, 0.0),
-            P2::new(1.0, 1.0),
-            P2::new(2.0, 2.0),
-        ];
+        let pts = vec![P2::new(0.0, 0.0), P2::new(1.0, 1.0), P2::new(2.0, 2.0)];
         let r = convex_hull(&pts);
         assert!(matches!(r, Err(CoreError::InsufficientPoints)));
     }
@@ -126,9 +116,13 @@ mod tests {
         let mut pts: Vec<P2> = Vec::new();
         let mut x: u64 = 0xdead_beef;
         for _ in 0..200 {
-            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let fx = ((x >> 32) as u32 as f64) / (u32::MAX as f64);
-            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let fy = ((x >> 32) as u32 as f64) / (u32::MAX as f64);
             pts.push(P2::new(fx, fy));
         }

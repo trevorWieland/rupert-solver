@@ -11,6 +11,12 @@ description = "Snap-and-certify verifier. F64Epsilon path is the v1 default; int
 [lints]
 workspace = true
 
+# inari and malachite are feature-gated v2 paths; cargo-machete sees them
+# as unused under default features. They ARE used when --features interval
+# / --features exact are enabled.
+[package.metadata.cargo-machete]
+ignored = ["inari", "malachite"]
+
 [features]
 default = []
 # Enables exact rational verification via malachite. Off by default — v1 only
@@ -23,7 +29,6 @@ interval = ["dep:inari"]
 rupert-core = { workspace = true }
 rupert-shapes = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true }
 inari = { workspace = true, optional = true }
 malachite = { workspace = true, optional = true }
 

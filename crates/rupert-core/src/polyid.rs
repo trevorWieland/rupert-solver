@@ -41,10 +41,8 @@ impl PolyId {
             hasher.update(&vertices[i].z.to_le_bytes());
         }
 
-        let mut canonical_faces: Vec<Vec<usize>> = faces
-            .iter()
-            .map(|f| canonicalize_face(f, &inv))
-            .collect();
+        let mut canonical_faces: Vec<Vec<usize>> =
+            faces.iter().map(|f| canonicalize_face(f, &inv)).collect();
         canonical_faces.sort();
 
         for face in &canonical_faces {
@@ -128,7 +126,15 @@ mod tests {
         let v2 = vec![v[2], v[1], v[0], v[3]];
         let f2: Vec<Vec<usize>> = f
             .iter()
-            .map(|face| face.iter().map(|&i| match i { 0 => 2, 2 => 0, x => x }).collect())
+            .map(|face| {
+                face.iter()
+                    .map(|&i| match i {
+                        0 => 2,
+                        2 => 0,
+                        x => x,
+                    })
+                    .collect()
+            })
             .collect();
         let a = PolyId::derive(&v, &f);
         let b = PolyId::derive(&v2, &f2);

@@ -20,7 +20,11 @@ pub struct Polyhedron {
 }
 
 impl Polyhedron {
-    pub fn new(name: impl Into<String>, vertices: Vec<Vec3>, faces: Vec<Vec<usize>>) -> Result<Self, CoreError> {
+    pub fn new(
+        name: impl Into<String>,
+        vertices: Vec<Vec3>,
+        faces: Vec<Vec<usize>>,
+    ) -> Result<Self, CoreError> {
         if vertices.is_empty() {
             return Err(CoreError::EmptyPolyhedron);
         }
@@ -49,7 +53,8 @@ impl Polyhedron {
     /// Stable BLAKE3 hash of the canonical (lex-sorted vertex bytes + face
     /// adjacency) representation. Equivalent shapes hash identically.
     pub fn id(&self) -> &PolyId {
-        self.cached_id.get_or_init(|| PolyId::derive(&self.vertices, &self.faces))
+        self.cached_id
+            .get_or_init(|| PolyId::derive(&self.vertices, &self.faces))
     }
 
     /// Mean edge length — handy for normalizing clearance margins.

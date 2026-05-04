@@ -41,5 +41,8 @@ pub(crate) fn run() -> Result<()> {
     for (p, n) in &violations {
         writeln!(out, "{}: {n} lines (limit {MAX_LINES})", p.display())?;
     }
-    bail!("check-lines: {} files over the line limit", violations.len());
+    bail!(
+        "check-lines: {} files over the line limit",
+        violations.len()
+    );
 }

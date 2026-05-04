@@ -17,12 +17,9 @@ rupert-shapes = { workspace = true }
 rupert-solvers = { workspace = true }
 rupert-verify = { workspace = true }
 rayon = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 anyhow = { workspace = true }
 time = { workspace = true }
-tracing = { workspace = true }
 walkdir = { workspace = true }
 
 [dev-dependencies]

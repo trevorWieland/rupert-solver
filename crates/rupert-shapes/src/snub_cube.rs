@@ -27,29 +27,31 @@ pub fn snub_cube() -> Polyhedron {
     // construction picks one chirality. We use the single-chirality
     // convention (even sign count, even permutations).
     let mut vertices: Vec<Vec3> = Vec::with_capacity(24);
-    let triples = [
-        (1.0, inv_t, t),
-        (inv_t, t, 1.0),
-        (t, 1.0, inv_t),
-    ];
+    let triples = [(1.0, inv_t, t), (inv_t, t, 1.0), (t, 1.0, inv_t)];
     // For each of the 3 even permutations of the magnitude triple,
     // emit the 8 sign combinations and keep those with an even count
     // of minus signs (4 combos: +++, +--, -+-, --+).
     for &(a, b, c) in &triples {
-        for &(sa, sb, sc) in &[(1.0, 1.0, 1.0), (1.0, -1.0, -1.0), (-1.0, 1.0, -1.0), (-1.0, -1.0, 1.0)] {
+        for &(sa, sb, sc) in &[
+            (1.0, 1.0, 1.0),
+            (1.0, -1.0, -1.0),
+            (-1.0, 1.0, -1.0),
+            (-1.0, -1.0, 1.0),
+        ] {
             vertices.push(Vec3::new(a * sa, b * sb, c * sc));
         }
     }
     // The above produces 12 vertices. The snub cube has 24 — the other 12
     // come from odd permutations with odd sign count (the mirror chirality
     // joined into the same shape). Add them:
-    let odd_triples = [
-        (1.0, t, inv_t),
-        (t, inv_t, 1.0),
-        (inv_t, 1.0, t),
-    ];
+    let odd_triples = [(1.0, t, inv_t), (t, inv_t, 1.0), (inv_t, 1.0, t)];
     for &(a, b, c) in &odd_triples {
-        for &(sa, sb, sc) in &[(1.0, 1.0, -1.0), (1.0, -1.0, 1.0), (-1.0, 1.0, 1.0), (-1.0, -1.0, -1.0)] {
+        for &(sa, sb, sc) in &[
+            (1.0, 1.0, -1.0),
+            (1.0, -1.0, 1.0),
+            (-1.0, 1.0, 1.0),
+            (-1.0, -1.0, -1.0),
+        ] {
             vertices.push(Vec3::new(a * sa, b * sb, c * sc));
         }
     }

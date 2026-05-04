@@ -33,10 +33,7 @@ pub fn project_xy(poly: &Polyhedron, q: Quat) -> Vec<P2> {
 
 /// Translate every 2D point by `(tx, ty)`.
 pub fn translate_xy(points: &[P2], tx: f64, ty: f64) -> Vec<P2> {
-    points
-        .iter()
-        .map(|p| P2::new(p.x + tx, p.y + ty))
-        .collect()
+    points.iter().map(|p| P2::new(p.x + tx, p.y + ty)).collect()
 }
 
 #[cfg(test)]

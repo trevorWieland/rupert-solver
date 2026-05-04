@@ -20,7 +20,12 @@ pub struct Quat {
 }
 
 impl Quat {
-    pub const IDENTITY: Self = Self { w: 1.0, x: 0.0, y: 0.0, z: 0.0 };
+    pub const IDENTITY: Self = Self {
+        w: 1.0,
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
     #[inline]
     pub const fn new(w: f64, x: f64, y: f64, z: f64) -> Self {
@@ -75,7 +80,8 @@ impl Quat {
     /// Spherical linear interpolation. Both inputs assumed unit-norm. The
     /// shorter arc is chosen.
     pub fn slerp(self, other: Self, t: f64) -> Self {
-        let mut cos_theta = self.w * other.w + self.x * other.x + self.y * other.y + self.z * other.z;
+        let mut cos_theta =
+            self.w * other.w + self.x * other.x + self.y * other.y + self.z * other.z;
         let mut o = other;
         if cos_theta < 0.0 {
             cos_theta = -cos_theta;
