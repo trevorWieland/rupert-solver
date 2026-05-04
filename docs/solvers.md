@@ -54,6 +54,18 @@ Each solver lives in `crates/rupert-solvers/src/<name>.rs`, implements `rupert_c
 
 **Cube to first solution.** Deterministic. Few hundred to ~10k evals depending on grid order.
 
+### `gosain_grimmer` (v0.1.0)
+
+**Algorithm.** Port of Gosain & Grimmer 2025 ([arXiv:2509.08190](https://arxiv.org/abs/2509.08190)). 7-parameter parametrization `x = (u, v, θ_p, φ_p, α, θ_q, φ_q)` — translation, inner spherical view + in-plane twist, outer spherical view. Steepest ascent on the clearance objective with backtracking line search; finite-difference gradient (~8 evals per gradient step). Random restarts.
+
+**v1 ↔ paper diffs.** The paper uses (a) symbolic gradients via sympy (here: finite difference), (b) the trust-region linearized-min-of-smooth direction over ε-active constraints (here: plain steepest ascent), and (c) the Nieuwland-scale objective μ (here: signed clearance, monotonically related). All three are documented as v2 enhancements in `crates/rupert-solvers/src/gosain_grimmer.rs` module docs.
+
+**Excels on.** Smooth-basin shapes — cube, octahedron, dodecahedron, icosahedron — with comparable or slightly worse eval counts than `random_then_refine` because of the FD gradient overhead. The point of this solver in v1 is the *parametrization*, which is what enables the paper's high-precision clearance maximization once symbolic gradients land.
+
+**Fails on.** Triakis tetrahedron (paper-quoted clearance ~4×10⁻⁶ requires either symbolic gradients or much higher trust-region depth than v1's backtracking line search reaches). Snub cube, noperthedron — same as the other solvers.
+
+**Cube to first solution.** ~200–500 evals once a restart hits a favorable initialization.
+
 ## Goal hierarchy for new solvers
 
 If you're contributing a new solver, here's a rough difficulty ladder — pick a target before you start:

@@ -10,6 +10,7 @@
 //! Adding a solver should NOT touch anything else in the workspace.
 
 pub mod face_normal_pairs;
+pub mod gosain_grimmer;
 pub mod hopf_grid;
 pub mod nelder_mead;
 pub mod random_quat;
@@ -19,13 +20,14 @@ pub mod sample;
 use rupert_core::Solver;
 
 pub use face_normal_pairs::FaceNormalPairs;
+pub use gosain_grimmer::GosainGrimmer;
 pub use hopf_grid::HopfGrid;
 pub use nelder_mead::NelderMead;
 pub use random_quat::RandomQuat;
 pub use random_then_refine::RandomThenRefine;
 
-/// Every solver we ship in v1. Append a `Box::new(MyNewSolver)` here to
-/// register a new solver.
+/// Every solver we ship. Append a `Box::new(MyNewSolver)` here to register
+/// a new solver.
 pub fn registered_solvers() -> Vec<Box<dyn Solver>> {
     vec![
         Box::new(RandomQuat),
@@ -33,6 +35,7 @@ pub fn registered_solvers() -> Vec<Box<dyn Solver>> {
         Box::new(NelderMead),
         Box::new(RandomThenRefine),
         Box::new(HopfGrid),
+        Box::new(GosainGrimmer),
     ]
 }
 
@@ -46,8 +49,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registered_solvers_count_is_five() {
-        assert_eq!(registered_solvers().len(), 5);
+    fn registered_solvers_count_is_six() {
+        assert_eq!(registered_solvers().len(), 6);
     }
 
     #[test]
