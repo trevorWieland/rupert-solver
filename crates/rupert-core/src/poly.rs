@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::CoreError;
+use crate::exact_vec3::ExactVec3;
 use crate::polyid::PolyId;
 use crate::vec3::Vec3;
 
@@ -10,11 +11,20 @@ use crate::vec3::Vec3;
 /// forming each face. Faces are oriented consistently with outward normals
 /// (right-hand rule), but the solver/verifier code only depends on the
 /// vertex set for the silhouette computation.
+///
+/// `exact_vertices`, when present, holds the symbolic-algebraic form of
+/// `vertices` (one [`ExactVec3`] per `vertices` entry, in identical order).
+/// Solvers ignore it; the verifier uses it for interval / rational
+/// recomputation. It is `#[serde(skip)]` because the JSON representation
+/// is f64-only — the exact form is rebuilt by shape constructors at
+/// runtime.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Polyhedron {
     pub name: String,
     pub vertices: Vec<Vec3>,
     pub faces: Vec<Vec<usize>>,
+    #[serde(skip)]
+    pub exact_vertices: Option<Vec<ExactVec3>>,
     #[serde(skip)]
     cached_id: std::sync::OnceLock<PolyId>,
 }
@@ -46,8 +56,23 @@ impl Polyhedron {
             name: name.into(),
             vertices,
             faces,
+            exact_vertices: None,
             cached_id: std::sync::OnceLock::new(),
         })
+    }
+
+    /// Build a polyhedron from exact-algebraic vertex expressions. The
+    /// f64 `vertices` field is derived by `eval_f64` on each entry, so
+    /// the two arrays are guaranteed to be in lock-step.
+    pub fn with_exact(
+        name: impl Into<String>,
+        exact: Vec<ExactVec3>,
+        faces: Vec<Vec<usize>>,
+    ) -> Result<Self, CoreError> {
+        let f64_vertices: Vec<Vec3> = exact.iter().map(ExactVec3::eval_f64).collect();
+        let mut p = Self::new(name, f64_vertices, faces)?;
+        p.exact_vertices = Some(exact);
+        Ok(p)
     }
 
     /// Stable BLAKE3 hash of the canonical (lex-sorted vertex bytes + face
@@ -136,5 +161,28 @@ mod tests {
     fn mean_edge_length_positive() {
         let t = unit_tetra();
         assert!(t.mean_edge_length() > 0.0);
+    }
+
+    #[test]
+    fn with_exact_derives_f64_vertices_in_order() {
+        use crate::expr::Expr;
+        let exact = vec![
+            ExactVec3::new(Expr::int(1), Expr::int(0), Expr::int(0)),
+            ExactVec3::new(Expr::int(0), Expr::int(1), Expr::int(0)),
+            ExactVec3::new(Expr::int(0), Expr::int(0), Expr::int(1)),
+            ExactVec3::new(Expr::int(1), Expr::int(1), Expr::int(1)),
+        ];
+        let faces = vec![vec![0, 1, 2], vec![0, 1, 3], vec![0, 2, 3], vec![1, 2, 3]];
+        let p = Polyhedron::with_exact("test", exact.clone(), faces).expect("valid");
+        assert_eq!(p.vertices.len(), 4);
+        assert_eq!(p.vertices[0], Vec3::new(1.0, 0.0, 0.0));
+        assert_eq!(p.vertices[3], Vec3::new(1.0, 1.0, 1.0));
+        assert_eq!(p.exact_vertices.as_ref().expect("present"), &exact);
+    }
+
+    #[test]
+    fn polyhedron_without_exact_has_none_field() {
+        let t = unit_tetra();
+        assert!(t.exact_vertices.is_none());
     }
 }

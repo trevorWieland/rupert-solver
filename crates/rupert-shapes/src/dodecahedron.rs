@@ -1,40 +1,54 @@
-//! Regular dodecahedron, edge length 2/φ (≈ 1.236), inscribed-sphere
-//! radius (apothem of each face) is 1.
+//! Regular dodecahedron — vertices over `Expr::GoldenRatio`.
+//!
+//! v2 phase 2 migration: vertices are stored as exact algebraic
+//! expressions; the f64 vertex array is derived via `eval_f64`. The
+//! migration is non-breaking — solvers still see the same f64 vertex
+//! coordinates (bit-identical to the previous hand-typed `PHI` constant
+//! up to f64 rounding) — and unlocks the `IntervalSnap` verifier path
+//! once phase 4 lands.
 
-use rupert_core::{Polyhedron, Vec3};
+use rupert_core::{ExactVec3, Expr, Polyhedron};
 
-/// Golden ratio (1 + √5) / 2.
-const PHI: f64 = 1.618_033_988_749_895;
-const INV_PHI: f64 = 0.618_033_988_749_895;
+fn vertex_table() -> Vec<ExactVec3> {
+    let phi = Expr::golden_ratio;
+    let inv_phi = || Expr::int(1) / phi();
+    let zero = || Expr::int(0);
+    let one = || Expr::int(1);
+    let neg_one = || Expr::int(-1);
+    let neg_phi = || -phi();
+    let neg_inv_phi = || -inv_phi();
+
+    vec![
+        // (±1, ±1, ±1)
+        ExactVec3::new(one(), one(), one()),
+        ExactVec3::new(one(), one(), neg_one()),
+        ExactVec3::new(one(), neg_one(), one()),
+        ExactVec3::new(one(), neg_one(), neg_one()),
+        ExactVec3::new(neg_one(), one(), one()),
+        ExactVec3::new(neg_one(), one(), neg_one()),
+        ExactVec3::new(neg_one(), neg_one(), one()),
+        ExactVec3::new(neg_one(), neg_one(), neg_one()),
+        // (0, ±1/φ, ±φ)
+        ExactVec3::new(zero(), inv_phi(), phi()),
+        ExactVec3::new(zero(), inv_phi(), neg_phi()),
+        ExactVec3::new(zero(), neg_inv_phi(), phi()),
+        ExactVec3::new(zero(), neg_inv_phi(), neg_phi()),
+        // (±1/φ, ±φ, 0)
+        ExactVec3::new(inv_phi(), phi(), zero()),
+        ExactVec3::new(inv_phi(), neg_phi(), zero()),
+        ExactVec3::new(neg_inv_phi(), phi(), zero()),
+        ExactVec3::new(neg_inv_phi(), neg_phi(), zero()),
+        // (±φ, 0, ±1/φ)
+        ExactVec3::new(phi(), zero(), inv_phi()),
+        ExactVec3::new(phi(), zero(), neg_inv_phi()),
+        ExactVec3::new(neg_phi(), zero(), inv_phi()),
+        ExactVec3::new(neg_phi(), zero(), neg_inv_phi()),
+    ]
+}
 
 pub fn dodecahedron() -> Polyhedron {
-    // Vertices: (±1, ±1, ±1) ∪ (0, ±1/φ, ±φ) ∪ (±1/φ, ±φ, 0) ∪ (±φ, 0, ±1/φ)
-    let vertices = vec![
-        Vec3::new(1.0, 1.0, 1.0),
-        Vec3::new(1.0, 1.0, -1.0),
-        Vec3::new(1.0, -1.0, 1.0),
-        Vec3::new(1.0, -1.0, -1.0),
-        Vec3::new(-1.0, 1.0, 1.0),
-        Vec3::new(-1.0, 1.0, -1.0),
-        Vec3::new(-1.0, -1.0, 1.0),
-        Vec3::new(-1.0, -1.0, -1.0),
-        Vec3::new(0.0, INV_PHI, PHI),
-        Vec3::new(0.0, INV_PHI, -PHI),
-        Vec3::new(0.0, -INV_PHI, PHI),
-        Vec3::new(0.0, -INV_PHI, -PHI),
-        Vec3::new(INV_PHI, PHI, 0.0),
-        Vec3::new(INV_PHI, -PHI, 0.0),
-        Vec3::new(-INV_PHI, PHI, 0.0),
-        Vec3::new(-INV_PHI, -PHI, 0.0),
-        Vec3::new(PHI, 0.0, INV_PHI),
-        Vec3::new(PHI, 0.0, -INV_PHI),
-        Vec3::new(-PHI, 0.0, INV_PHI),
-        Vec3::new(-PHI, 0.0, -INV_PHI),
-    ];
-    // 12 pentagonal faces. Each face indexed CCW from outside. The
-    // adjacency is a standard table; we use vertex coordinates as a guide
-    // and trust the convex-hull-of-projection pipeline downstream — the
-    // exact face winding doesn't affect projection-based clearance.
+    let vertices = vertex_table();
+    // 12 pentagonal faces. Indexing must match the `vertex_table` order.
     let faces = vec![
         vec![0, 8, 4, 14, 12],
         vec![0, 12, 1, 17, 16],
@@ -49,7 +63,7 @@ pub fn dodecahedron() -> Polyhedron {
         vec![5, 19, 7, 11, 9],
         vec![6, 15, 7, 19, 18],
     ];
-    Polyhedron::new("dodecahedron", vertices, faces).expect("dodec is valid")
+    Polyhedron::with_exact("dodecahedron", vertices, faces).expect("dodec is valid")
 }
 
 #[cfg(test)]
@@ -71,5 +85,30 @@ mod tests {
         for face in &dodecahedron().faces {
             assert_eq!(face.len(), 5);
         }
+    }
+
+    #[test]
+    fn exact_vertices_present() {
+        let p = dodecahedron();
+        let exact = p.exact_vertices.as_ref().expect("exact present");
+        assert_eq!(exact.len(), 20);
+        // First vertex is (1, 1, 1).
+        let f = exact[0].eval_f64();
+        assert_eq!(f.x, 1.0);
+        assert_eq!(f.y, 1.0);
+        assert_eq!(f.z, 1.0);
+    }
+
+    #[test]
+    fn f64_vertices_match_legacy_phi_constant() {
+        // The old hand-typed PHI = 1.618_033_988_749_895; vertex (0, 1/φ, φ)
+        // at index 8.
+        let p = dodecahedron();
+        let v = p.vertices[8];
+        let phi_legacy = 1.618_033_988_749_895_f64;
+        let inv_phi_legacy = 1.0_f64 / phi_legacy;
+        assert_eq!(v.x, 0.0);
+        assert!((v.y - inv_phi_legacy).abs() < 1e-15);
+        assert!((v.z - phi_legacy).abs() < 1e-15);
     }
 }

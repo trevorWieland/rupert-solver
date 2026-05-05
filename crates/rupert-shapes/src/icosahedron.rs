@@ -1,26 +1,39 @@
-//! Regular icosahedron, vertices at (0, ±1, ±φ), (±1, ±φ, 0), (±φ, 0, ±1).
+//! Regular icosahedron — vertices over `Expr::GoldenRatio`.
+//!
+//! v2 phase 2 migration; same pattern as `dodecahedron.rs`. Solvers see
+//! identical f64 coordinates; verifier gains an `IntervalSnap` path
+//! once phase 4 lands.
 
-use rupert_core::{Polyhedron, Vec3};
+use rupert_core::{ExactVec3, Expr, Polyhedron};
 
-const PHI: f64 = 1.618_033_988_749_895;
+fn vertex_table() -> Vec<ExactVec3> {
+    let phi = Expr::golden_ratio;
+    let neg_phi = || -phi();
+    let zero = || Expr::int(0);
+    let one = || Expr::int(1);
+    let neg_one = || Expr::int(-1);
+
+    vec![
+        // (0, ±1, ±φ)
+        ExactVec3::new(zero(), one(), phi()),
+        ExactVec3::new(zero(), one(), neg_phi()),
+        ExactVec3::new(zero(), neg_one(), phi()),
+        ExactVec3::new(zero(), neg_one(), neg_phi()),
+        // (±1, ±φ, 0)
+        ExactVec3::new(one(), phi(), zero()),
+        ExactVec3::new(one(), neg_phi(), zero()),
+        ExactVec3::new(neg_one(), phi(), zero()),
+        ExactVec3::new(neg_one(), neg_phi(), zero()),
+        // (±φ, 0, ±1)
+        ExactVec3::new(phi(), zero(), one()),
+        ExactVec3::new(phi(), zero(), neg_one()),
+        ExactVec3::new(neg_phi(), zero(), one()),
+        ExactVec3::new(neg_phi(), zero(), neg_one()),
+    ]
+}
 
 pub fn icosahedron() -> Polyhedron {
-    let vertices = vec![
-        Vec3::new(0.0, 1.0, PHI),
-        Vec3::new(0.0, 1.0, -PHI),
-        Vec3::new(0.0, -1.0, PHI),
-        Vec3::new(0.0, -1.0, -PHI),
-        Vec3::new(1.0, PHI, 0.0),
-        Vec3::new(1.0, -PHI, 0.0),
-        Vec3::new(-1.0, PHI, 0.0),
-        Vec3::new(-1.0, -PHI, 0.0),
-        Vec3::new(PHI, 0.0, 1.0),
-        Vec3::new(PHI, 0.0, -1.0),
-        Vec3::new(-PHI, 0.0, 1.0),
-        Vec3::new(-PHI, 0.0, -1.0),
-    ];
-    // 20 triangular faces. Like the dodecahedron, exact winding doesn't
-    // affect projection-based clearance; this is a standard adjacency.
+    let vertices = vertex_table();
     let faces = vec![
         vec![0, 4, 6],
         vec![0, 6, 10],
@@ -43,7 +56,7 @@ pub fn icosahedron() -> Polyhedron {
         vec![2, 1, 9],
         vec![2, 9, 8],
     ];
-    Polyhedron::new("icosahedron", vertices, faces).expect("icos is valid")
+    Polyhedron::with_exact("icosahedron", vertices, faces).expect("icos is valid")
 }
 
 #[cfg(test)]
@@ -58,5 +71,12 @@ mod tests {
     #[test]
     fn face_count_20() {
         assert_eq!(icosahedron().face_count(), 20);
+    }
+
+    #[test]
+    fn exact_vertices_present() {
+        let p = icosahedron();
+        let exact = p.exact_vertices.as_ref().expect("exact present");
+        assert_eq!(exact.len(), 12);
     }
 }
