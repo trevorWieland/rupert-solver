@@ -13,7 +13,10 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+# 1.86 is required for f64::next_up / f64::next_down (used by the
+# interval evaluator's rational-to-interval bracketing). Toolchain
+# pin lives in rust-toolchain.toml at 1.94.1.
+rust-version = "1.86"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/trevorWieland/rupert-solver"
 
@@ -75,9 +78,13 @@ anyhow = "1"
 nalgebra = "0.33"
 rand = "0.8"
 rand_xoshiro = "0.6"
+chull = "0.2"
 
 # Verification (interval / exact)
-inari = "1"
+# inari's `gmp` feature (enabled by default) requires m4/autoconf to
+# build gmp-mpfr-sys; we use the pure-Rust `libm` backend instead.
+# IEEE 1788 semantics are preserved either way.
+inari = { version = "1", default-features = false, features = ["libm"] }
 malachite = "0.4"
 
 # CLI + observability

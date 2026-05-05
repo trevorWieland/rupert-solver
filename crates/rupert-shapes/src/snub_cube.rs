@@ -10,8 +10,16 @@
 //! All even permutations of (±1, ±1/t, ±t), with an even number of minus
 //! signs (yielding one chirality of the snub cube — the other is the
 //! mirror image and equally Rupert-resistant).
+//!
+//! Faces are computed at construction time via `chull` (3D convex hull
+//! triangulation). The 6 squares come back as 12 coplanar triangles
+//! (each square split along a diagonal); patch_aware and face_normal_pairs
+//! consume face normals from the triangulation, so the redundancy is
+//! cosmetically odd but mathematically equivalent.
 
 use rupert_core::{Polyhedron, Vec3};
+
+use crate::hull3d::triangulate_convex_hull;
 
 /// Tribonacci constant. Real root of `t^3 - t^2 - t - 1 = 0`.
 /// Approximate to f64 precision; v2 replaces with exact algebraic form.
@@ -56,12 +64,8 @@ pub fn snub_cube() -> Polyhedron {
         }
     }
     debug_assert_eq!(vertices.len(), 24);
-    // Faces: 38 total (6 squares + 32 triangles). Computing the exact face
-    // adjacency for the snub cube takes a non-trivial table; v1 ships
-    // empty faces because the projection-based clearance pipeline only
-    // depends on the vertex cloud. The face_normal_pairs solver will
-    // recognize the empty face list and skip enumeration on this shape.
-    Polyhedron::new("snub_cube", vertices, vec![]).expect("snub cube vertices are valid")
+    let faces = triangulate_convex_hull(&vertices);
+    Polyhedron::new("snub_cube", vertices, faces).expect("snub cube vertices are valid")
 }
 
 #[cfg(test)]
@@ -74,11 +78,28 @@ mod tests {
     }
 
     #[test]
-    fn face_count_zero_in_v1() {
-        // Documents the v1 caveat: snub cube ships with empty faces; v2
-        // will populate the 38-face adjacency along with the algebraic
-        // tribonacci constant.
-        assert_eq!(snub_cube().face_count(), 0);
+    fn face_count_is_triangulation() {
+        // chull triangulates: 32 native triangles + 6 squares × 2 = 44
+        // triangles. patch_aware and face_normal_pairs consume face
+        // normals, so the redundancy is harmless.
+        assert_eq!(snub_cube().face_count(), 44);
+    }
+
+    #[test]
+    fn every_face_is_triangle() {
+        for f in &snub_cube().faces {
+            assert_eq!(f.len(), 3);
+        }
+    }
+
+    #[test]
+    fn faces_reference_valid_vertex_indices() {
+        let p = snub_cube();
+        for face in &p.faces {
+            for &i in face {
+                assert!(i < p.vertex_count());
+            }
+        }
     }
 
     #[test]

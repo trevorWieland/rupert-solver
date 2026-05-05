@@ -1,6 +1,9 @@
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+# `-C target-cpu=haswell` is required by `inari` for FMA + AVX2 rounding
+# mode primitives. Haswell is Intel 2013+ / AMD Zen+; if you're on
+# truly ancient hardware, switch to inari's gmp feature.
+rustflags = ["-C", "link-arg=-fuse-ld=mold", "-C", "target-cpu=haswell"]
 
 [target.aarch64-unknown-linux-gnu]
 linker = "clang"

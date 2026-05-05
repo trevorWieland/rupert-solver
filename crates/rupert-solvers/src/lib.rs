@@ -15,6 +15,7 @@ pub mod gosain_grimmer;
 pub mod hopf_grid;
 pub mod imperts;
 pub mod nelder_mead;
+pub mod patch_aware;
 pub mod random_quat;
 pub mod random_then_refine;
 pub mod sample;
@@ -26,6 +27,7 @@ pub use gosain_grimmer::GosainGrimmer;
 pub use hopf_grid::HopfGrid;
 pub use imperts::Imperts;
 pub use nelder_mead::NelderMead;
+pub use patch_aware::PatchAware;
 pub use random_quat::RandomQuat;
 pub use random_then_refine::RandomThenRefine;
 
@@ -40,6 +42,7 @@ pub fn registered_solvers() -> Vec<Box<dyn Solver>> {
         Box::new(HopfGrid),
         Box::new(GosainGrimmer),
         Box::new(Imperts),
+        Box::new(PatchAware),
     ]
 }
 
@@ -53,8 +56,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registered_solvers_count_is_seven() {
-        assert_eq!(registered_solvers().len(), 7);
+    fn registered_solvers_count_is_eight() {
+        assert_eq!(registered_solvers().len(), 8);
     }
 
     #[test]

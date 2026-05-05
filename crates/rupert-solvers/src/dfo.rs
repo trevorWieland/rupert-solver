@@ -29,6 +29,49 @@
 //!   the multi-restart spirit of upstream's `attempts=100` parameter.
 
 use rand::Rng;
+use rupert_core::{Candidate, Quat};
+
+/// Apply a 10-component delta vector to a `Candidate` and renormalize
+/// the perturbed quaternions. Layout:
+/// `[Δw_o, Δx_o, Δy_o, Δz_o, Δw_i, Δx_i, Δy_i, Δz_i, Δtx, Δty]`.
+///
+/// Used by `imperts` (refinement) and `patch_aware` (within-patch
+/// optimization) — both share the 10-DOF delta parametrization that
+/// matches Tom 7's upstream `imperts.cc`. Falls back to identity on
+/// the (vanishingly unlikely) zero-quat case.
+pub(crate) fn apply_quat_delta(seed: &Candidate, delta: &[f64]) -> Candidate {
+    debug_assert_eq!(delta.len(), 10);
+    let outer = Quat::new(
+        seed.outer.w + delta[0],
+        seed.outer.x + delta[1],
+        seed.outer.y + delta[2],
+        seed.outer.z + delta[3],
+    );
+    let inner = Quat::new(
+        seed.inner.w + delta[4],
+        seed.inner.x + delta[5],
+        seed.inner.y + delta[6],
+        seed.inner.z + delta[7],
+    );
+    let outer = if outer.norm_sq() < 1e-30 {
+        Quat::IDENTITY
+    } else {
+        outer.normalized()
+    };
+    let inner = if inner.norm_sq() < 1e-30 {
+        Quat::IDENTITY
+    } else {
+        inner.normalized()
+    };
+    Candidate {
+        outer,
+        inner,
+        translation: [
+            seed.translation[0] + delta[8],
+            seed.translation[1] + delta[9],
+        ],
+    }
+}
 
 const NM_REFLECTION: f64 = 1.0;
 const NM_EXPANSION: f64 = 2.0;

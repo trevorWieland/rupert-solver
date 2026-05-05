@@ -19,6 +19,8 @@ use std::f64::consts::PI;
 
 use rupert_core::{Polyhedron, Vec3};
 
+use crate::hull3d::triangulate_convex_hull;
+
 // Exact rational seed values from the paper (constants are computed at
 // module-init time from the integer numerators / integer denominators).
 //
@@ -62,11 +64,8 @@ pub fn noperthedron() -> Polyhedron {
         }
     }
     debug_assert_eq!(vertices.len(), 90);
-    // Faces are intentionally omitted — solvers consume only the vertex
-    // cloud via projection. Visualization (STL export, residue rendering)
-    // and the face_normal_pairs solver gracefully degrade when faces are
-    // empty. v2 will wire a 3D convex-hull triangulation here.
-    Polyhedron::new("noperthedron", vertices, vec![]).expect("noperthedron vertices are valid")
+    let faces = triangulate_convex_hull(&vertices);
+    Polyhedron::new("noperthedron", vertices, faces).expect("noperthedron vertices are valid")
 }
 
 #[cfg(test)]

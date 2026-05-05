@@ -11,6 +11,7 @@
 
 pub mod cube;
 pub mod dodecahedron;
+pub mod hull3d;
 pub mod icosahedron;
 pub mod io;
 pub mod noperthedron;
@@ -29,7 +30,7 @@ pub use snub_cube::snub_cube;
 pub use tetrahedron::tetrahedron;
 pub use triakis_tetrahedron::triakis_tetrahedron;
 
-use rupert_core::Polyhedron;
+use rupert_core::{Polyhedron, Quat};
 
 /// All builtin polyhedra in canonical order. The CLI's `rupert list shapes`
 /// reads this list verbatim.
@@ -49,6 +50,64 @@ pub fn builtins() -> Vec<Polyhedron> {
 /// Look up a builtin polyhedron by name; `None` if unknown.
 pub fn lookup(name: &str) -> Option<Polyhedron> {
     builtins().into_iter().find(|p| p.name == name)
+}
+
+/// Rotation symmetry group for a builtin shape, as a list of unit
+/// quaternions. Unknown shapes return `vec![Quat::IDENTITY]` (a trivial
+/// group); the patch_aware solver gracefully handles this — no symmetry
+/// reduction means full O(F²) brute force.
+#[must_use]
+pub fn rotation_group_for(name: &str) -> Vec<Quat> {
+    use rupert_core::symmetry::{
+        icosahedral_rotation_group, octahedral_rotation_group, tetrahedral_rotation_group,
+    };
+    match name {
+        "tetrahedron" | "triakis_tetrahedron" => tetrahedral_rotation_group(),
+        "cube" | "octahedron" | "snub_cube" => octahedral_rotation_group(),
+        "dodecahedron" | "icosahedron" => icosahedral_rotation_group(),
+        _ => vec![Quat::IDENTITY],
+    }
+}
+
+#[cfg(test)]
+mod symmetry_validation {
+    use rupert_core::symmetry::{octahedral_rotation_group, tetrahedral_rotation_group};
+    use rupert_core::{Polyhedron, Quat, Vec3};
+
+    fn permutes(vertices: &[Vec3], q: Quat, tol: f64) -> bool {
+        for v in vertices {
+            let r = q.rotate(*v);
+            if !vertices.iter().any(|o| (*o - r).norm() < tol) {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn check_group(group: &[Quat], poly: &Polyhedron) {
+        for (i, q) in group.iter().enumerate() {
+            assert!(
+                permutes(&poly.vertices, *q, 1e-9),
+                "group element {i} (q = {q:?}) does not permute {} vertex set",
+                poly.name
+            );
+        }
+    }
+
+    #[test]
+    fn tetrahedral_group_permutes_tetrahedron() {
+        check_group(&tetrahedral_rotation_group(), &super::tetrahedron());
+    }
+
+    #[test]
+    fn octahedral_group_permutes_cube() {
+        check_group(&octahedral_rotation_group(), &super::cube());
+    }
+
+    #[test]
+    fn octahedral_group_permutes_octahedron() {
+        check_group(&octahedral_rotation_group(), &super::octahedron());
+    }
 }
 
 #[cfg(test)]

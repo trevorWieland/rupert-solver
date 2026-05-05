@@ -42,11 +42,9 @@
 use rand::Rng;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rand_xoshiro::rand_core::SeedableRng;
-use rupert_core::{
-    Budget, Candidate, EvalCounter, Polyhedron, Quat, Solution, Solver, SolverOutcome,
-};
+use rupert_core::{Budget, Candidate, EvalCounter, Polyhedron, Solution, Solver, SolverOutcome};
 
-use crate::dfo::nelder_mead_box;
+use crate::dfo::{apply_quat_delta, nelder_mead_box};
 use crate::sample::random_unit_quat;
 
 #[derive(Debug, Default)]
@@ -113,7 +111,7 @@ impl Solver for Imperts {
             }
             let seed_for_loss = best_candidate;
             let mut loss = |delta: &[f64]| -> f64 {
-                let cand = apply_delta(&seed_for_loss, delta);
+                let cand = apply_quat_delta(&seed_for_loss, delta);
                 let c = ec.evaluate(&cand);
                 if !c.is_finite() {
                     return -PENALTY_FLOOR;
@@ -126,7 +124,7 @@ impl Solver for Imperts {
             let (delta, neg_clearance) = nelder_mead_box(&mut loss, &start, &lb, &ub, inner_budget);
             let clearance_found = -neg_clearance;
             if clearance_found.is_finite() && clearance_found > best_clearance {
-                best_candidate = apply_delta(&seed_for_loss, &delta);
+                best_candidate = apply_quat_delta(&seed_for_loss, &delta);
                 best_clearance = clearance_found;
                 last_improved = outer;
             }
@@ -166,43 +164,6 @@ fn bootstrap_seed<R: Rng + ?Sized>(
         }
     }
     None
-}
-
-/// Apply a 10-component delta to a seed candidate. Renormalizes
-/// quaternions; falls back to identity on the (vanishingly unlikely)
-/// zero-quat case.
-fn apply_delta(seed: &Candidate, delta: &[f64]) -> Candidate {
-    debug_assert_eq!(delta.len(), 10);
-    let outer = Quat::new(
-        seed.outer.w + delta[0],
-        seed.outer.x + delta[1],
-        seed.outer.y + delta[2],
-        seed.outer.z + delta[3],
-    );
-    let inner = Quat::new(
-        seed.inner.w + delta[4],
-        seed.inner.x + delta[5],
-        seed.inner.y + delta[6],
-        seed.inner.z + delta[7],
-    );
-    let outer = if outer.norm_sq() < 1e-30 {
-        Quat::IDENTITY
-    } else {
-        outer.normalized()
-    };
-    let inner = if inner.norm_sq() < 1e-30 {
-        Quat::IDENTITY
-    } else {
-        inner.normalized()
-    };
-    Candidate {
-        outer,
-        inner,
-        translation: [
-            seed.translation[0] + delta[8],
-            seed.translation[1] + delta[9],
-        ],
-    }
 }
 
 #[cfg(test)]

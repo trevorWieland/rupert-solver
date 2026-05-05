@@ -9,13 +9,16 @@ pub mod error;
 pub mod eval;
 pub mod exact_vec3;
 pub mod expr;
+pub mod expr_interval;
 pub mod hull2d;
+pub mod hull2d_interval;
 pub mod poly;
 pub mod polyid;
 pub mod projection;
 pub mod quat;
 pub mod runresult;
 pub mod solver;
+pub mod symmetry;
 pub mod vec3;
 
 pub use clearance::{clearance, signed_distance_to_polygon};

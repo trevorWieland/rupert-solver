@@ -54,6 +54,18 @@ Each solver lives in `crates/rupert-solvers/src/<name>.rs`, implements `rupert_c
 
 **Cube to first solution.** Deterministic. Few hundred to ~10k evals depending on grid order.
 
+### `patch_aware` (v0.1.0)
+
+**Algorithm.** Tom 7's patch-decomposition idea (SIGBOVIK 2025), v0.1.0 implementation. For each polyhedron: enumerate the patches of `SO(3)` — connected open regions where the face-front/back assignment is constant. Reduce by the polyhedron's rotation symmetry group. Within each `(outer_patch, inner_patch)` pair, run a Nelder-Mead in the 10-DOF delta box anchored at the patch's representative quaternion, with a soft Hamming-distance penalty that biases the simplex back inside the patch.
+
+**Per-shape patch table** is cached behind a `OnceLock<Mutex<HashMap<PolyId, Arc<PatchTable>>>>` keyed by `Polyhedron::id()`. Enumeration RNG is seeded from a hash of the shape name, so the patch table is deterministic per shape (independent of `Budget::seed`). Symmetry group lookup hand-tabled: tetrahedral / octahedral covered; icosahedral (dodec/icos) is a v0.2.0 stub returning identity-only (no symmetry reduction; full O(F²) brute force still works correctly, just ~5× slower).
+
+**Excels on.** Shapes whose Rupert passage requires off-axis configurations that don't sit at any face-aligned principal direction — exactly where `face_normal_pairs` fails. The snub cube (open since arXiv:2112.13754) is the headline target; with its 38 faces and 24 chiral cubic symmetries, it has hundreds of patches to scan.
+
+**Fails on.** v0.1.0 brute force isn't enough on its own — even with patches, the inner Nelder-Mead per cell needs more sample budget for small basins. v0.2.0 adds branch-and-bound across cells via interval-arithmetic upper bounds (uses [`rupert_core::hull2d_interval`]), which is how this solver becomes a real contender on the snub cube.
+
+**Cube to first solution.** ~10 000–50 000 evals depending on the canonical-patch count after symmetry reduction.
+
 ### `imperts` (v0.1.0)
 
 **Algorithm.** Port of Tom 7's `imperts.cc` from his SIGBOVIK 2025 SourceForge tree. Self-bootstrapping refiner: random-quaternion search until a positive-clearance seed is found, then an outer loop that perturbs the seed by uniform-random deltas in a `(Δq_outer, Δq_inner, Δt)` box and accepts strictly-improving steps. Adaptive box-shrink (×0.7 per flat outer iter) — explicitly NOT in upstream, where Tom's smart DFO (`cc-lib::Opt::Minimize`) handles concentration without shrinking.
