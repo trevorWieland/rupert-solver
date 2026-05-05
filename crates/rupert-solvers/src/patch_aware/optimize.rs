@@ -14,6 +14,10 @@ const Q_BOX: f64 = 0.15;
 const T_BOX: f64 = 0.5;
 const LAMBDA_PENALTY: f64 = 0.1;
 const PENALTY_FLOOR: f64 = -10_000.0;
+/// In Phase C, skip cells whose recon clearance is more than this far
+/// below the running best. Inner Nelder-Mead can't realistically catch
+/// up across this gap inside one patch's local neighborhood.
+const SKIP_SLACK: f64 = 0.5;
 
 const LB: [f64; 10] = [
     -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -T_BOX, -T_BOX,
@@ -22,8 +26,24 @@ const UB: [f64; 10] = [
     Q_BOX, Q_BOX, Q_BOX, Q_BOX, Q_BOX, Q_BOX, Q_BOX, Q_BOX, T_BOX, T_BOX,
 ];
 
-/// Scan every (outer, inner) canonical-patch pair; return the best
-/// (clearance, candidate) found.
+/// v0.2.0 strategy: **reconnaissance-first scan**.
+///
+/// Phase A: 1 eval per cell at the canonical anchor (zero-delta).
+/// Cheap, gives a baseline clearance estimate per (outer, inner) cell.
+///
+/// Phase B: sort cells by descending recon score. The most promising
+/// cells get optimized first; the least promising might never be
+/// reached if the budget runs out — but the budget runs out worst on
+/// hopeless cells, which is exactly where we wanted to spend less.
+///
+/// Phase C: per-cell Nelder-Mead with uniform `per_pair_evals` budget,
+/// in score order. After every cell, update `best_so_far`. **Skip**
+/// cells whose recon score is worse than the current `best_so_far` by
+/// more than `SKIP_SLACK`, since the inner Nelder-Mead is unlikely to
+/// recover that gap inside the patch's local neighborhood.
+///
+/// This is the v0.1.0 → v0.2.0 step that makes patch_aware
+/// budget-efficient on shapes with many cells (snub cube: 1296 cells).
 pub(super) fn scan_cells(
     table: &PatchTable,
     ec: &mut EvalCounter<'_>,
@@ -32,36 +52,64 @@ pub(super) fn scan_cells(
     per_pair_evals: u64,
 ) -> Option<(f64, Candidate)> {
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(budget.seed);
-    let mut best_candidate = Candidate::IDENTITY;
-    let mut best_clearance = f64::NEG_INFINITY;
 
-    for outer_canon in &table.canonical {
+    // Phase A: reconnaissance.
+    let mut recon: Vec<(usize, usize, f64)> = Vec::new();
+    for (oi, outer_canon) in table.canonical.iter().enumerate() {
         if ec.count() >= max {
-            break;
+            return None;
         }
-        for inner_canon in &table.canonical {
+        for (ii, inner_canon) in table.canonical.iter().enumerate() {
             if ec.count() >= max {
                 break;
             }
-            let remaining = max.saturating_sub(ec.count());
-            let inner_budget = per_pair_evals.min(remaining) as usize;
-            if inner_budget < 16 {
-                break;
-            }
-            if let Some((c, cand)) = optimize_pair(
-                ec,
-                outer_canon,
-                inner_canon,
-                &table.normals,
-                inner_budget,
-                &mut rng,
-            ) && c > best_clearance
-            {
-                best_clearance = c;
-                best_candidate = cand;
-            }
+            let candidate = Candidate {
+                outer: outer_canon.q_rep,
+                inner: inner_canon.q_rep,
+                translation: [0.0, 0.0],
+            };
+            let c = ec.evaluate(&candidate);
+            recon.push((oi, ii, c));
         }
     }
+
+    // Phase B: sort cells by recon score descending. Treat non-finite
+    // values as worst (they'd be skipped anyway).
+    recon.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Phase C: optimize in priority order.
+    let mut best_candidate = Candidate::IDENTITY;
+    let mut best_clearance = f64::NEG_INFINITY;
+
+    for (oi, ii, recon_score) in recon {
+        if ec.count() >= max {
+            break;
+        }
+        // Skip hopeless cells: if recon is far worse than current best,
+        // the per-cell Nelder-Mead can't realistically catch up inside
+        // a 0.15-wide quat-delta box around this anchor.
+        if best_clearance > 0.0 && recon_score < best_clearance - SKIP_SLACK {
+            continue;
+        }
+        let remaining = max.saturating_sub(ec.count());
+        let inner_budget = per_pair_evals.min(remaining) as usize;
+        if inner_budget < 16 {
+            break;
+        }
+        if let Some((c, cand)) = optimize_pair(
+            ec,
+            &table.canonical[oi],
+            &table.canonical[ii],
+            &table.normals,
+            inner_budget,
+            &mut rng,
+        ) && c > best_clearance
+        {
+            best_clearance = c;
+            best_candidate = cand;
+        }
+    }
+
     if best_clearance.is_finite() {
         Some((best_clearance, best_candidate))
     } else {

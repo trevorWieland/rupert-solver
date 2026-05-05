@@ -46,7 +46,10 @@ pub(super) fn rotation_group_for(name: &str) -> Vec<Quat> {
     match name {
         "tetrahedron" | "triakis_tetrahedron" => tetrahedral_rotation_group(),
         "cube" | "octahedron" | "snub_cube" => octahedral_rotation_group(),
-        "dodecahedron" | "icosahedron" => icosahedral_rotation_group(),
+        "icosahedron" => icosahedral_rotation_group(),
+        // Dodec uses different rotation axes than icos in our coords;
+        // patch_aware runs without symmetry reduction on dodec until
+        // a dedicated dodecahedral group lands (v0.3.0).
         _ => vec![Quat::IDENTITY],
     }
 }

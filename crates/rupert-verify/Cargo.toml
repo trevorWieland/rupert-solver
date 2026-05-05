@@ -6,30 +6,26 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Snap-and-certify verifier. F64Epsilon path is the v1 default; interval/rational paths gated."
+description = "Snap-and-certify verifier. F64Epsilon + IntervalSnap; exact rational path gated behind `exact`."
 
 [lints]
 workspace = true
 
-# inari and malachite are feature-gated v2 paths; cargo-machete sees them
-# as unused under default features. They ARE used when --features interval
-# / --features exact are enabled.
+# malachite is the only feature-gated v2 path now; inari is non-optional
+# (used by `interval_cert` for IntervalSnap).
 [package.metadata.cargo-machete]
-ignored = ["inari", "malachite"]
+ignored = ["malachite"]
 
 [features]
 default = []
-# Enables exact rational verification via malachite. Off by default — v1 only
-# wires the F64Epsilon path for the orchestration loop.
+# Enables exact rational verification via malachite. v0.2 work item.
 exact = ["dep:malachite"]
-# Enables interval-arithmetic verification via inari. Off by default.
-interval = ["dep:inari"]
 
 [dependencies]
 rupert-core = { workspace = true }
 rupert-shapes = { workspace = true }
 thiserror = { workspace = true }
-inari = { workspace = true, optional = true }
+inari = { workspace = true }
 malachite = { workspace = true, optional = true }
 
 [dev-dependencies]

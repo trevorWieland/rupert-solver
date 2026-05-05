@@ -1,16 +1,16 @@
 //! Regular tetrahedron with vertices at alternating corners of the unit cube.
 
-use rupert_core::{Polyhedron, Vec3};
+use rupert_core::{ExactVec3, Polyhedron};
 
 pub fn tetrahedron() -> Polyhedron {
     let vertices = vec![
-        Vec3::new(1.0, 1.0, 1.0),
-        Vec3::new(-1.0, -1.0, 1.0),
-        Vec3::new(-1.0, 1.0, -1.0),
-        Vec3::new(1.0, -1.0, -1.0),
+        ExactVec3::int(1, 1, 1),
+        ExactVec3::int(-1, -1, 1),
+        ExactVec3::int(-1, 1, -1),
+        ExactVec3::int(1, -1, -1),
     ];
     let faces = vec![vec![0, 1, 2], vec![0, 2, 3], vec![0, 3, 1], vec![1, 3, 2]];
-    Polyhedron::new("tetrahedron", vertices, faces).expect("tetra is valid")
+    Polyhedron::with_exact("tetrahedron", vertices, faces).expect("tetra is valid")
 }
 
 #[cfg(test)]

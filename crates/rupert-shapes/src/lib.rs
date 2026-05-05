@@ -56,6 +56,16 @@ pub fn lookup(name: &str) -> Option<Polyhedron> {
 /// quaternions. Unknown shapes return `vec![Quat::IDENTITY]` (a trivial
 /// group); the patch_aware solver gracefully handles this — no symmetry
 /// reduction means full O(F²) brute force.
+///
+/// **Dodecahedron caveat (v0.2.0).** Our `icosahedron` and `dodecahedron`
+/// are both icosahedrally-symmetric but live in *different coordinate
+/// orientations*: the icos's vertex axes don't lie along the dodec's
+/// face-center axes (they differ by golden-ratio scaling). So
+/// `icosahedral_rotation_group()` correctly preserves the icosahedron
+/// only — applying it to the dodec produces vertices outside the dodec
+/// set. v0.3.0 work item: write a separate `dodecahedral_rotation_group`
+/// with axes (0, φ, 1) (face axis) and (0, 1/φ, φ) (vertex axis) suited
+/// to the dodec's coordinates.
 #[must_use]
 pub fn rotation_group_for(name: &str) -> Vec<Quat> {
     use rupert_core::symmetry::{
@@ -64,14 +74,19 @@ pub fn rotation_group_for(name: &str) -> Vec<Quat> {
     match name {
         "tetrahedron" | "triakis_tetrahedron" => tetrahedral_rotation_group(),
         "cube" | "octahedron" | "snub_cube" => octahedral_rotation_group(),
-        "dodecahedron" | "icosahedron" => icosahedral_rotation_group(),
+        "icosahedron" => icosahedral_rotation_group(),
+        // Dodecahedron: see caveat above; v0.3.0 ships a dedicated
+        // dodec rotation group. For now patch_aware runs without
+        // symmetry reduction — slow but correct.
         _ => vec![Quat::IDENTITY],
     }
 }
 
 #[cfg(test)]
 mod symmetry_validation {
-    use rupert_core::symmetry::{octahedral_rotation_group, tetrahedral_rotation_group};
+    use rupert_core::symmetry::{
+        icosahedral_rotation_group, octahedral_rotation_group, tetrahedral_rotation_group,
+    };
     use rupert_core::{Polyhedron, Quat, Vec3};
 
     fn permutes(vertices: &[Vec3], q: Quat, tol: f64) -> bool {
@@ -108,6 +123,14 @@ mod symmetry_validation {
     fn octahedral_group_permutes_octahedron() {
         check_group(&octahedral_rotation_group(), &super::octahedron());
     }
+
+    #[test]
+    fn icosahedral_group_permutes_icosahedron() {
+        check_group(&icosahedral_rotation_group(), &super::icosahedron());
+    }
+
+    // dodec uses different rotation axes in our coords — see
+    // `rotation_group_for` doc. v0.3.0 will add a dodecahedral group.
 }
 
 #[cfg(test)]

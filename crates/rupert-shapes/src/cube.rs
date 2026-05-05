@@ -1,27 +1,28 @@
-//! Unit cube `[-1, 1]^3`.
+//! Unit cube `[-1, 1]^3`. Rational coordinates throughout — fully
+//! `ExactRational`-eligible once that verifier path lands.
 
-use rupert_core::{Polyhedron, Vec3};
+use rupert_core::{ExactVec3, Polyhedron};
 
 pub fn cube() -> Polyhedron {
     let vertices = vec![
-        Vec3::new(-1.0, -1.0, -1.0),
-        Vec3::new(1.0, -1.0, -1.0),
-        Vec3::new(1.0, 1.0, -1.0),
-        Vec3::new(-1.0, 1.0, -1.0),
-        Vec3::new(-1.0, -1.0, 1.0),
-        Vec3::new(1.0, -1.0, 1.0),
-        Vec3::new(1.0, 1.0, 1.0),
-        Vec3::new(-1.0, 1.0, 1.0),
+        ExactVec3::int(-1, -1, -1),
+        ExactVec3::int(1, -1, -1),
+        ExactVec3::int(1, 1, -1),
+        ExactVec3::int(-1, 1, -1),
+        ExactVec3::int(-1, -1, 1),
+        ExactVec3::int(1, -1, 1),
+        ExactVec3::int(1, 1, 1),
+        ExactVec3::int(-1, 1, 1),
     ];
     let faces = vec![
-        vec![0, 1, 2, 3], // bottom
-        vec![4, 5, 6, 7], // top
-        vec![0, 1, 5, 4], // -y
-        vec![2, 3, 7, 6], // +y
-        vec![0, 3, 7, 4], // -x
-        vec![1, 2, 6, 5], // +x
+        vec![0, 1, 2, 3],
+        vec![4, 5, 6, 7],
+        vec![0, 1, 5, 4],
+        vec![2, 3, 7, 6],
+        vec![0, 3, 7, 4],
+        vec![1, 2, 6, 5],
     ];
-    Polyhedron::new("cube", vertices, faces).expect("cube is valid")
+    Polyhedron::with_exact("cube", vertices, faces).expect("cube is valid")
 }
 
 #[cfg(test)]

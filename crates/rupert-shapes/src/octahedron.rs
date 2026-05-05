@@ -1,15 +1,15 @@
 //! Regular octahedron with vertices at ±1 along each axis.
 
-use rupert_core::{Polyhedron, Vec3};
+use rupert_core::{ExactVec3, Polyhedron};
 
 pub fn octahedron() -> Polyhedron {
     let vertices = vec![
-        Vec3::new(1.0, 0.0, 0.0),
-        Vec3::new(-1.0, 0.0, 0.0),
-        Vec3::new(0.0, 1.0, 0.0),
-        Vec3::new(0.0, -1.0, 0.0),
-        Vec3::new(0.0, 0.0, 1.0),
-        Vec3::new(0.0, 0.0, -1.0),
+        ExactVec3::int(1, 0, 0),
+        ExactVec3::int(-1, 0, 0),
+        ExactVec3::int(0, 1, 0),
+        ExactVec3::int(0, -1, 0),
+        ExactVec3::int(0, 0, 1),
+        ExactVec3::int(0, 0, -1),
     ];
     let faces = vec![
         vec![0, 2, 4],
@@ -21,7 +21,7 @@ pub fn octahedron() -> Polyhedron {
         vec![3, 1, 5],
         vec![0, 3, 5],
     ];
-    Polyhedron::new("octahedron", vertices, faces).expect("octa is valid")
+    Polyhedron::with_exact("octahedron", vertices, faces).expect("octa is valid")
 }
 
 #[cfg(test)]

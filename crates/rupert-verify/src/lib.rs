@@ -5,6 +5,9 @@
 //! interval and exact paths are gated behind feature flags and arrive in v2.
 
 pub mod fallback_f64;
+pub mod interval_cert;
+
+pub use interval_cert::certify_interval;
 
 use rupert_core::{CertMethod, Certification, Polyhedron, Solution, evaluate_clearance};
 use thiserror::Error;
@@ -29,6 +32,12 @@ pub enum VerifyError {
     },
     #[error("recomputed clearance {0} not strictly positive (≤ {1})")]
     NotStrictlyPositive(f64, f64),
+    #[error("polyhedron has no exact_vertices — interval certification unavailable")]
+    NoExactVertices,
+    #[error("interval-arithmetic outer hull combinatorics could not be certified")]
+    HullCombinatoricsAmbiguous,
+    #[error("inner shadow vertex not strictly inside outer hull (interval check)")]
+    InnerNotStrictlyInside,
 }
 
 /// Run the verifier on a single solution. Returns a [`Certification`]

@@ -88,27 +88,113 @@ pub fn octahedral_rotation_group() -> Vec<Quat> {
     out
 }
 
-/// Icosahedral rotation group I, |I| = 60. **v0.1.0 stub** — returns
-/// only the identity. The full group requires:
-/// - 6 vertex axes × 4 rotations each = 24
-/// - 10 face axes × 2 rotations = 20
-/// - 15 edge axes × 1 rotation = 15
-/// - identity = 1
+/// Icosahedral rotation group I, |I| = 60. Identity + 24 vertex
+/// rotations (6 axes × 4 rotations) + 20 face rotations (10 axes × 2)
+/// + 15 edge rotations.
 ///
-/// The face axes are permutations of `(0, φ+1, 1)` (NOT
-/// `(0, 1/φ, φ)` as the dodec vertex set might suggest — the dodec
-/// vertices and icos face centroids are dual but their f64
-/// scales in this codebase don't coincide). Edge axes are the
-/// 15 axis-canonical midpoints of the 30 icosahedral edges.
-///
-/// v0.2.0 work item — write the correct face/edge tables with a
-/// per-element-permutes-vertex-set test. Until then, the
-/// `patch_aware` solver runs on dodec/icos without symmetry
-/// reduction (full O(F²) brute force, ~5× more work but
-/// correct).
+/// Edge axes are computed at runtime by deduplicating antipodal pairs
+/// of icosahedron-edge midpoints. Vertex and face axes are tabulated
+/// in the canonical icos coordinate system (vertices at `(0, ±1, ±φ)`
+/// and permutations).
 #[must_use]
 pub fn icosahedral_rotation_group() -> Vec<Quat> {
-    vec![Quat::IDENTITY]
+    let phi = f64::midpoint(1.0, 5.0_f64.sqrt());
+    let phi2 = phi + 1.0; // φ² = φ + 1.
+    let mut out = Vec::with_capacity(60);
+    out.push(Quat::IDENTITY);
+
+    // 6 vertex axes (icos vertices), 4 rotations each.
+    let vertex_axes = [
+        Vec3::new(0.0, 1.0, phi),
+        Vec3::new(0.0, 1.0, -phi),
+        Vec3::new(1.0, phi, 0.0),
+        Vec3::new(1.0, -phi, 0.0),
+        Vec3::new(phi, 0.0, 1.0),
+        Vec3::new(phi, 0.0, -1.0),
+    ];
+    for axis in vertex_axes {
+        for k in 1..5 {
+            out.push(Quat::from_axis_angle(axis, 2.0 * PI * f64::from(k) / 5.0));
+        }
+    }
+
+    // 10 face axes (icos face centroids).
+    // 4 cube-corner axes — (1, 1, 1)-type centroids:
+    let face_axes_cube = [
+        Vec3::new(1.0, 1.0, 1.0),
+        Vec3::new(1.0, 1.0, -1.0),
+        Vec3::new(1.0, -1.0, 1.0),
+        Vec3::new(-1.0, 1.0, 1.0),
+    ];
+    // 6 "rectangular" face axes — cyclic permutations of `(φ², 1, 0)`
+    // (the icos face centroid direction up to scaling), with sign of
+    // the unit component flipped. Note `(1, φ², 0)` is NOT in the
+    // orbit — that would be an x↔y swap, a reflection, not a rotation.
+    let face_axes_rect = [
+        Vec3::new(phi2, 1.0, 0.0),
+        Vec3::new(phi2, -1.0, 0.0),
+        Vec3::new(0.0, phi2, 1.0),
+        Vec3::new(0.0, phi2, -1.0),
+        Vec3::new(1.0, 0.0, phi2),
+        Vec3::new(-1.0, 0.0, phi2),
+    ];
+    for axis in face_axes_cube.iter().chain(face_axes_rect.iter()) {
+        out.push(Quat::from_axis_angle(*axis, 2.0 * PI / 3.0));
+        out.push(Quat::from_axis_angle(*axis, 4.0 * PI / 3.0));
+    }
+
+    // 15 edge axes — antipodal-deduped icos edge midpoints.
+    for axis in icos_edge_axes(phi) {
+        out.push(Quat::from_axis_angle(axis, PI));
+    }
+
+    debug_assert_eq!(out.len(), 60, "icos group size = {}", out.len());
+    out
+}
+
+/// Compute the 15 distinct icosahedral edge axes by walking the
+/// 12 vertices, finding pairs at edge length (distance 2 in our
+/// coordinate system), and deduplicating antipodal midpoints.
+fn icos_edge_axes(phi: f64) -> Vec<Vec3> {
+    let icos_vertices = [
+        Vec3::new(0.0, 1.0, phi),
+        Vec3::new(0.0, 1.0, -phi),
+        Vec3::new(0.0, -1.0, phi),
+        Vec3::new(0.0, -1.0, -phi),
+        Vec3::new(1.0, phi, 0.0),
+        Vec3::new(1.0, -phi, 0.0),
+        Vec3::new(-1.0, phi, 0.0),
+        Vec3::new(-1.0, -phi, 0.0),
+        Vec3::new(phi, 0.0, 1.0),
+        Vec3::new(phi, 0.0, -1.0),
+        Vec3::new(-phi, 0.0, 1.0),
+        Vec3::new(-phi, 0.0, -1.0),
+    ];
+    let edge_length_sq = 4.0_f64;
+    let mut axes: Vec<Vec3> = Vec::new();
+    for i in 0..icos_vertices.len() {
+        for j in (i + 1)..icos_vertices.len() {
+            let d_sq = (icos_vertices[i] - icos_vertices[j]).norm_sq();
+            if (d_sq - edge_length_sq).abs() < 1.0e-9 {
+                let mid = (icos_vertices[i] + icos_vertices[j]) * 0.5;
+                let canonical = canonicalize_axis(mid);
+                if !axes.iter().any(|a| (*a - canonical).norm() < 1.0e-9) {
+                    axes.push(canonical);
+                }
+            }
+        }
+    }
+    axes
+}
+
+/// Canonicalize an axis direction by ensuring the lex-largest
+/// representative (between v and -v) is returned. Stabilizes
+/// hash/dedup across antipodal duplicates.
+fn canonicalize_axis(v: Vec3) -> Vec3 {
+    let neg = -v;
+    let v_tuple = (v.x, v.y, v.z);
+    let neg_tuple = (neg.x, neg.y, neg.z);
+    if v_tuple >= neg_tuple { v } else { neg }
 }
 
 #[cfg(test)]
@@ -126,8 +212,15 @@ mod tests {
     }
 
     #[test]
-    fn icosahedral_group_size_v01_stub() {
-        assert_eq!(icosahedral_rotation_group().len(), 1);
+    fn icosahedral_group_size_60() {
+        assert_eq!(icosahedral_rotation_group().len(), 60);
+    }
+
+    #[test]
+    fn icosahedral_edge_axes_count_15() {
+        let phi = f64::midpoint(1.0, 5.0_f64.sqrt());
+        let axes = icos_edge_axes(phi);
+        assert_eq!(axes.len(), 15, "icos has 15 edge axes (30 edges / 2)");
     }
 
     #[test]
