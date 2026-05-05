@@ -22,8 +22,13 @@ pub struct LeaderboardRow {
 /// Result categories presented in the rendered leaderboard.
 #[derive(Debug, Clone, Default)]
 pub struct AggregatedView {
-    /// Certified Solved rows — the headline ranking.
+    /// Certified Solved rows — fastest-passage ranking. Per (shape, solver),
+    /// pick the run with the smallest eval_count; ties broken by clearance.
     pub headline: Vec<LeaderboardRow>,
+    /// Same buckets as `headline`, but each row reports the seed with the
+    /// largest clearance (refiner-friendly view). This is the column where
+    /// solvers like `imperts` shine even though they spend more evals.
+    pub highest_clearance: Vec<LeaderboardRow>,
     /// Solved-but-uncertified rows (e.g. solver returned Found but
     /// verifier's snap-and-recompute disagreed; preserved for diagnostics).
     pub uncertified: Vec<LeaderboardRow>,
@@ -65,13 +70,17 @@ pub fn aggregate(results: &[RunResult]) -> AggregatedView {
         }
     }
 
-    let headline = headline_buckets
+    let headline: Vec<LeaderboardRow> = headline_buckets
+        .iter()
+        .map(|(k, group)| best_row_fastest(k.0.clone(), k.1.clone(), group))
+        .collect();
+    let highest_clearance: Vec<LeaderboardRow> = headline_buckets
         .into_iter()
-        .map(|(k, group)| best_row(k.0, k.1, &group))
+        .map(|(k, group)| best_row_max_clearance(k.0, k.1, &group))
         .collect();
     let uncertified = uncertified_buckets
         .into_iter()
-        .map(|(k, group)| best_row(k.0, k.1, &group))
+        .map(|(k, group)| best_row_fastest(k.0, k.1, &group))
         .collect();
     let open_problems: Vec<String> = all_shapes
         .difference(&shapes_with_certified)
@@ -80,14 +89,15 @@ pub fn aggregate(results: &[RunResult]) -> AggregatedView {
 
     AggregatedView {
         headline,
+        highest_clearance,
         uncertified,
         open_problems,
     }
 }
 
-fn best_row(shape: String, solver: String, group: &[&RunResult]) -> LeaderboardRow {
-    // Pick the run with the smallest eval_count. Ties broken by clearance
-    // (highest wins).
+/// Per-bucket row: pick the run with the smallest eval_count. Ties
+/// broken by clearance (highest wins).
+fn best_row_fastest(shape: String, solver: String, group: &[&RunResult]) -> LeaderboardRow {
     let mut best: &RunResult = group[0];
     for r in &group[1..] {
         if r.eval_count < best.eval_count {
@@ -100,6 +110,25 @@ fn best_row(shape: String, solver: String, group: &[&RunResult]) -> LeaderboardR
             }
         }
     }
+    row_from(shape, solver, best, group.len())
+}
+
+/// Per-bucket row: pick the run with the largest clearance. Ties broken
+/// by smallest eval_count.
+fn best_row_max_clearance(shape: String, solver: String, group: &[&RunResult]) -> LeaderboardRow {
+    let clearance_of = |r: &RunResult| r.solution.as_ref().map_or(0.0, |s| s.clearance);
+    let mut best: &RunResult = group[0];
+    for r in &group[1..] {
+        let r_c = clearance_of(r);
+        let b_c = clearance_of(best);
+        if r_c > b_c || (r_c == b_c && r.eval_count < best.eval_count) {
+            best = r;
+        }
+    }
+    row_from(shape, solver, best, group.len())
+}
+
+fn row_from(shape: String, solver: String, best: &RunResult, samples: usize) -> LeaderboardRow {
     LeaderboardRow {
         shape,
         solver,
@@ -108,7 +137,7 @@ fn best_row(shape: String, solver: String, group: &[&RunResult]) -> LeaderboardR
         best_eval_count: best.eval_count,
         best_clearance: best.solution.as_ref().map_or(0.0, |s| s.clearance),
         wall_time_ms: best.wall_time_ms,
-        samples: group.len(),
+        samples,
     }
 }
 
@@ -207,5 +236,26 @@ mod tests {
         let view = aggregate(&[r]);
         assert!(view.headline.is_empty());
         assert_eq!(view.uncertified.len(), 1);
+    }
+
+    #[test]
+    fn highest_clearance_picks_max_clearance_seed() {
+        // Three runs: differing eval counts and clearances. The headline
+        // picks the FASTEST (50 evals); highest_clearance picks the
+        // BIGGEST clearance (0.20).
+        let runs = vec![
+            certified_run("cube", "rq", 0, 100, 0.10),
+            certified_run("cube", "rq", 1, 50, 0.05),
+            certified_run("cube", "rq", 2, 80, 0.20),
+        ];
+        let view = aggregate(&runs);
+        assert_eq!(view.headline.len(), 1);
+        assert_eq!(view.headline[0].best_eval_count, 50);
+        assert_eq!(view.headline[0].best_seed, 1);
+
+        assert_eq!(view.highest_clearance.len(), 1);
+        assert!((view.highest_clearance[0].best_clearance - 0.20).abs() < 1e-12);
+        assert_eq!(view.highest_clearance[0].best_seed, 2);
+        assert_eq!(view.highest_clearance[0].best_eval_count, 80);
     }
 }

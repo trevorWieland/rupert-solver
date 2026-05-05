@@ -65,10 +65,13 @@ async fn render_step(w: &mut LeadWorld) {
     w.rendered = Some(render(&AggregatedView::default()));
 }
 
-#[then(regex = r"^the output mentions Headline, Uncertified, and Open problems$")]
-async fn three_sections(w: &mut LeadWorld) {
+#[then(
+    regex = r"^the output mentions Headline, Highest clearance, Uncertified, and Open problems$"
+)]
+async fn four_sections(w: &mut LeadWorld) {
     let s = w.rendered.as_deref().expect("rendered");
     assert!(s.contains("## Headline"));
+    assert!(s.contains("## Highest clearance"));
     assert!(s.contains("## Uncertified candidates"));
     assert!(s.contains("## Open problems"));
 }
@@ -115,6 +118,13 @@ async fn one_row_best_50(w: &mut LeadWorld) {
     assert_eq!(v.headline.len(), 1);
     assert_eq!(v.headline[0].best_eval_count, 50);
     assert_eq!(v.headline[0].samples, 3);
+}
+
+#[then(regex = r"^the highest_clearance row has clearance 0\.20$")]
+async fn highest_clearance_check(w: &mut LeadWorld) {
+    let v = w.view.as_ref().expect("agg");
+    assert_eq!(v.highest_clearance.len(), 1);
+    assert!((v.highest_clearance[0].best_clearance - 0.20).abs() < 1e-12);
 }
 
 #[given(regex = r"^one Solved run for cube without certification$")]
