@@ -51,7 +51,7 @@ The leaderboard updates from the JSONL files in `results/`. Commit your solver +
 ```
 L0 rupert-core         (foundation: geometry, projection, hull, clearance, Solver trait)
 L1 rupert-shapes       (8 builtin polyhedra + JSON I/O; deps: core)
-L1 rupert-solvers      (5 baseline solvers; deps: core)
+L1 rupert-solvers      (8 baseline solvers; deps: core)
 L1 rupert-leaderboard  (aggregate JSONL → LEADERBOARD.md; deps: core)
 L2 rupert-verify       (snap-and-certify verifier; deps: core, shapes)
 L3 rupert-bench        (single-run + parallel sweep; deps: core, shapes, solvers, verify)
@@ -71,11 +71,11 @@ L4 bin/rupert-cli      (the user-facing binary; deps: all of the above)
 
 A run produces a `RunResult` with `outcome ∈ {Solved, Exhausted, Error, Disqualified}`. Only `Solved` rows with a non-`None` `solution.certification` are eligible for the leaderboard headline. `rupert verify` re-runs `rupert_verify::certify` on each result; if the recomputed clearance ≤ `F64_EPS = 1e-9`, the row becomes `Disqualified`.
 
-v1 ships `CertMethod::F64Epsilon` only. The interval (`inari`) and exact (`malachite`) paths are feature-gated and arrive in v2 along with the algebraic-number coordinate DSL needed for the snub cube and the noperthedron's exact-paper construction.
+v0.2 ships **two cert tiers**: `CertMethod::F64Epsilon` (f64 self-consistency) and `CertMethod::IntervalSnap` (rigorous lower-bound via `inari` over the algebraic vertex tables). The bench runner attempts IntervalSnap first; falls back to F64Epsilon. The third tier `CertMethod::ExactRational` (via `malachite`) is roadmapped for v0.3.0 — see `docs/roadmap.md`.
 
-## What is NOT in v1 (do not start these without explicit user approval)
+## What is NOT shipped (do not start these without explicit user approval)
 
-GPU kernels, SDP / Lasserre hierarchies, autodiff, LP scale-oracle (translation is a free search variable in v1), patch decomposition, refutation-track infrastructure, algebraic-number coord DSL, snub cube proof attempt, Lean / Coq export, external/subprocess solvers, wasm builds, hosted leaderboard, multi-precision floats. These are tracked under `docs/architecture.md#future`.
+GPU kernels, SDP / Lasserre hierarchies, autodiff, LP scale-oracle (translation is a free search variable today), branch-and-bound across patch_aware cells, `certify_exact` / refutation-track infrastructure, snub cube proof attempt, Lean / Coq export, external/subprocess solvers, wasm builds, hosted leaderboard. These are tracked in `docs/roadmap.md` with explicit triggers.
 
 ## When in doubt
 
@@ -84,7 +84,8 @@ GPU kernels, SDP / Lasserre hierarchies, autodiff, LP scale-oracle (translation 
 - `docs/verification.md` — snap-and-certify pattern + the noperthedron caveat.
 - `docs/porting.md` — translating an external solver into `rupert-solvers/src/<name>.rs`.
 - `docs/adding-a-solver.md` — minimal new-solver template.
-- `docs/architecture.md` — crate graph rationale + future-roadmap.
-- `docs/v2-algebraic-coords.md` — design notes for the algebraic-coordinate DSL that unlocks the snub cube + dodecahedron + noperthedron interval-verification paths. Read before starting any v2 verifier work.
+- `docs/architecture.md` — crate graph rationale + future work.
+- `docs/v2-algebraic-coords.md` — design notes for the algebraic-coordinate DSL (Expr, ExactVec3, eval_interval). Phases 1–4, 6, 7 shipped; phase 5 (rational evaluator), 8 (certify_exact), 9 (regression upgrade) pending.
+- `docs/roadmap.md` — code roadmap *and* experiment ladder for large-budget runs. Read before picking up any new direction.
 
 The plan that birthed this scaffold lives at `~/.claude/plans/virtual-booping-graham.md` (read-only context). The arXiv references are in the project README.

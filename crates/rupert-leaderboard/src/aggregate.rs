@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use rupert_core::{RunOutcome, RunResult};
+use rupert_core::{CertMethod, RunOutcome, RunResult};
 
 /// One row of the headline leaderboard. We aggregate over `(shape, solver)`
 /// using the BEST seed: the result with the smallest `eval_count` among
@@ -17,6 +17,9 @@ pub struct LeaderboardRow {
     pub best_clearance: f64,
     pub wall_time_ms: u64,
     pub samples: usize,
+    /// The strongest certification method achieved on the best run.
+    /// `None` for uncertified rows.
+    pub cert_method: Option<CertMethod>,
 }
 
 /// Result categories presented in the rendered leaderboard.
@@ -129,6 +132,11 @@ fn best_row_max_clearance(shape: String, solver: String, group: &[&RunResult]) -
 }
 
 fn row_from(shape: String, solver: String, best: &RunResult, samples: usize) -> LeaderboardRow {
+    let cert_method = best
+        .solution
+        .as_ref()
+        .and_then(|s| s.certification.as_ref())
+        .map(|c| c.method);
     LeaderboardRow {
         shape,
         solver,
@@ -138,6 +146,7 @@ fn row_from(shape: String, solver: String, best: &RunResult, samples: usize) -> 
         best_clearance: best.solution.as_ref().map_or(0.0, |s| s.clearance),
         wall_time_ms: best.wall_time_ms,
         samples,
+        cert_method,
     }
 }
 

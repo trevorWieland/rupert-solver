@@ -63,11 +63,11 @@ pub fn render(view: &AggregatedView) -> String {
 fn render_table(s: &mut String, rows: &[LeaderboardRow], sort_by: SortBy) {
     let _ = writeln!(
         s,
-        "| shape | solver | best evals | clearance | best seed | wall ms | samples |"
+        "| shape | solver | cert | best evals | clearance | best seed | wall ms | samples |"
     );
     let _ = writeln!(
         s,
-        "|-------|--------|-----------:|----------:|----------:|--------:|--------:|"
+        "|-------|--------|------|-----------:|----------:|----------:|--------:|--------:|"
     );
     let mut sorted: Vec<&LeaderboardRow> = rows.iter().collect();
     sorted.sort_by(|a, b| {
@@ -82,12 +82,19 @@ fn render_table(s: &mut String, rows: &[LeaderboardRow], sort_by: SortBy) {
         }
     });
     for r in sorted {
+        let cert_label = match r.cert_method {
+            Some(rupert_core::CertMethod::ExactRational) => "exact",
+            Some(rupert_core::CertMethod::IntervalSnap) => "interval",
+            Some(rupert_core::CertMethod::F64Epsilon) => "f64ε",
+            None => "—",
+        };
         let _ = writeln!(
             s,
-            "| `{}` | `{}` v{} | {} | {:.6e} | {} | {} | {} |",
+            "| `{}` | `{}` v{} | {} | {} | {:.6e} | {} | {} | {} |",
             r.shape,
             r.solver,
             r.solver_version,
+            cert_label,
             r.best_eval_count,
             r.best_clearance,
             r.best_seed,
@@ -124,6 +131,7 @@ mod tests {
             best_clearance: 0.123,
             wall_time_ms: 5,
             samples: 1,
+            cert_method: Some(rupert_core::CertMethod::F64Epsilon),
         });
         let s = render(&view);
         assert!(s.contains("`cube`"));
@@ -143,6 +151,7 @@ mod tests {
             best_clearance: 0.0875,
             wall_time_ms: 23,
             samples: 3,
+            cert_method: Some(rupert_core::CertMethod::IntervalSnap),
         });
         let s = render(&view);
         let highest_idx = s.find("## Highest clearance").expect("section");

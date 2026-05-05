@@ -54,15 +54,23 @@ Each solver lives in `crates/rupert-solvers/src/<name>.rs`, implements `rupert_c
 
 **Cube to first solution.** Deterministic. Few hundred to ~10k evals depending on grid order.
 
-### `patch_aware` (v0.1.0)
+### `patch_aware` (v0.2.0)
 
-**Algorithm.** Tom 7's patch-decomposition idea (SIGBOVIK 2025), v0.1.0 implementation. For each polyhedron: enumerate the patches of `SO(3)` — connected open regions where the face-front/back assignment is constant. Reduce by the polyhedron's rotation symmetry group. Within each `(outer_patch, inner_patch)` pair, run a Nelder-Mead in the 10-DOF delta box anchored at the patch's representative quaternion, with a soft Hamming-distance penalty that biases the simplex back inside the patch.
+**Algorithm.** Tom 7's patch-decomposition idea (SIGBOVIK 2025). For each polyhedron: enumerate the patches of `SO(3)` — connected open regions where the face-front/back assignment is constant. Reduce by the polyhedron's rotation symmetry group. The cross product of canonical (outer, inner) patches gives the cells to scan.
 
-**Per-shape patch table** is cached behind a `OnceLock<Mutex<HashMap<PolyId, Arc<PatchTable>>>>` keyed by `Polyhedron::id()`. Enumeration RNG is seeded from a hash of the shape name, so the patch table is deterministic per shape (independent of `Budget::seed`). Symmetry group lookup hand-tabled: tetrahedral / octahedral covered; icosahedral (dodec/icos) is a v0.2.0 stub returning identity-only (no symmetry reduction; full O(F²) brute force still works correctly, just ~5× slower).
+**v0.2.0 reconnaissance-first scan.** Each cell is processed in three phases:
 
-**Excels on.** Shapes whose Rupert passage requires off-axis configurations that don't sit at any face-aligned principal direction — exactly where `face_normal_pairs` fails. The snub cube (open since arXiv:2112.13754) is the headline target; with its 38 faces and 24 chiral cubic symmetries, it has hundreds of patches to scan.
+- **Phase A (recon)**: 1 evaluation per cell at the canonical anchor (zero-delta).
+- **Phase B (sort)**: cells sorted by descending recon score.
+- **Phase C (optimize)**: per-cell Nelder-Mead in priority order, with a `SKIP_SLACK = 0.5` predicate skipping cells whose recon is more than 0.5 below the running best (the inner Nelder-Mead can't realistically catch up across that gap inside the local 0.15-wide quat-delta box).
 
-**Fails on.** v0.1.0 brute force isn't enough on its own — even with patches, the inner Nelder-Mead per cell needs more sample budget for small basins. v0.2.0 adds branch-and-bound across cells via interval-arithmetic upper bounds (uses [`rupert_core::hull2d_interval`]), which is how this solver becomes a real contender on the snub cube.
+This focuses budget on cells with a real chance, rather than v0.1.0's blind cell-by-cell scan. For shapes with hundreds of cells (snub cube: 1296 = 36²) the speedup is substantial.
+
+**Per-shape patch table** is cached behind a `OnceLock<Mutex<HashMap<PolyId, Arc<PatchTable>>>>` keyed by `Polyhedron::id()`. Enumeration RNG is seeded from a hash of the shape name, so the patch table is deterministic per shape (independent of `Budget::seed`). All five shapes with rotation symmetry have full groups: tetrahedron and triakis tetrahedron use the order-12 tetrahedral group; cube, octahedron, snub cube use the order-24 octahedral group; icosahedron uses the order-60 icosahedral group; dodecahedron uses the order-60 dodecahedral group (a separate group from the icosahedral, since the two solids live in different coordinate frames).
+
+**Excels on.** Shapes whose Rupert passage requires off-axis configurations that don't sit at any face-aligned principal direction — exactly where `face_normal_pairs` fails.
+
+**Fails on.** Snub cube — the headline open problem (arXiv:2112.13754). Even with v0.2.0's recon-first scan, 2M evals don't find a passage. The next algorithmic step (v0.3.0) is **branch-and-bound across cells** using `convex_hull_interval_certified` to derive interval upper bounds on per-patch clearance. That would prune entire cells without spending optimization budget on them.
 
 **Cube to first solution.** ~10 000–50 000 evals depending on the canonical-patch count after symmetry reduction.
 

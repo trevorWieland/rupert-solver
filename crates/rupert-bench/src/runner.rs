@@ -7,7 +7,7 @@ use rupert_core::{
     Budget, BudgetSnapshot, EvalCounter, HostInfo, Polyhedron, RunOutcome, RunResult,
     SCHEMA_VERSION, Solver, SolverOutcome,
 };
-use rupert_verify::certify;
+use rupert_verify::{certify, certify_interval};
 use time::OffsetDateTime;
 
 /// Run `solver` against `poly` once, with the given budget and seed.
@@ -35,16 +35,31 @@ pub fn run_one(
     let eval_count = ec.count();
 
     let (run_outcome, solution) = match outcome {
-        SolverOutcome::Found(mut sol) => match certify(&sol, poly) {
-            Ok(cert) => {
-                sol.certification = Some(cert);
-                (RunOutcome::Solved, Some(sol))
+        SolverOutcome::Found(mut sol) => {
+            // Try the strongest verification first (interval arithmetic),
+            // then fall back to F64Epsilon. The interval path requires
+            // exact_vertices on the polyhedron — shapes without it
+            // (custom JSON loads, etc.) skip straight to F64Epsilon.
+            let interval_attempt = if poly.exact_vertices.is_some() {
+                certify_interval(&sol, poly).ok()
+            } else {
+                None
+            };
+            let cert_result = match interval_attempt {
+                Some(cert) => Ok(cert),
+                None => certify(&sol, poly),
+            };
+            match cert_result {
+                Ok(cert) => {
+                    sol.certification = Some(cert);
+                    (RunOutcome::Solved, Some(sol))
+                }
+                Err(err) => {
+                    let reason = format!("verifier rejected: {err}");
+                    (RunOutcome::Disqualified { reason }, Some(sol))
+                }
             }
-            Err(err) => {
-                let reason = format!("verifier rejected: {err}");
-                (RunOutcome::Disqualified { reason }, Some(sol))
-            }
-        },
+        }
         SolverOutcome::Exhausted => (RunOutcome::Exhausted, None),
         SolverOutcome::Error(e) => (RunOutcome::from_solver_error(&e), None),
     };
@@ -93,7 +108,9 @@ mod tests {
         );
         assert!(result.solution.is_some());
         let sol = result.solution.expect("solution");
-        assert!(sol.certification.is_some());
+        let cert = sol.certification.expect("certification");
+        // Cube has exact_vertices, so the runner promotes to IntervalSnap.
+        assert_eq!(cert.method, rupert_core::CertMethod::IntervalSnap);
     }
 
     #[test]

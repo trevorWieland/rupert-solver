@@ -152,6 +152,125 @@ pub fn icosahedral_rotation_group() -> Vec<Quat> {
     out
 }
 
+/// Dodecahedral rotation group I (same group as the icosahedron, but
+/// in the dodec's coordinate frame). Identity + 24 face rotations
+/// (6 axes × 4 rotations) + 20 vertex rotations (10 axes × 2)
+/// + 15 edge rotations.
+///
+/// Coordinate system: dodec vertices are `(±1, ±1, ±1)` and cyclic
+/// permutations of `(0, ±1/φ, ±φ)`. Face axes (5-fold) point at face
+/// centers; the standard dodec face centers lie along directions like
+/// `(0, 1, φ)` and cyclic perms — the SAME numerical directions as the
+/// icosahedron's vertex axes.
+///
+/// Vertex axes (3-fold) point at the 20 dodec vertices, which split
+/// into 4 cube-corner axes `(±1, ±1, ±1)` and 6 axes through the
+/// other 12 vertices `(0, ±1/φ, ±φ)` and cyclic perms.
+///
+/// Edge axes (2-fold): computed at runtime by deduplicating antipodal
+/// midpoints of dodec edges. Edge length is `2/φ`, so edge length
+/// squared is `4/φ² = 4(2 - φ)`.
+#[must_use]
+pub fn dodecahedral_rotation_group() -> Vec<Quat> {
+    let phi = f64::midpoint(1.0, 5.0_f64.sqrt());
+    let inv_phi = 1.0 / phi;
+    let mut out = Vec::with_capacity(60);
+    out.push(Quat::IDENTITY);
+
+    // 6 face axes (5-fold rotations). Dodec face centers (centroids
+    // of 5 vertices per pentagonal face) lie along directions
+    // `(0, ±φ, ±1)` and cyclic permutations — note `φ` and `1` are
+    // SWAPPED relative to the icos vertex axes `(0, 1, φ)`.
+    let face_axes = [
+        Vec3::new(0.0, phi, 1.0),
+        Vec3::new(0.0, phi, -1.0),
+        Vec3::new(phi, 1.0, 0.0),
+        Vec3::new(phi, -1.0, 0.0),
+        Vec3::new(1.0, 0.0, phi),
+        Vec3::new(-1.0, 0.0, phi),
+    ];
+    for axis in face_axes {
+        for k in 1..5 {
+            out.push(Quat::from_axis_angle(axis, 2.0 * PI * f64::from(k) / 5.0));
+        }
+    }
+
+    // 10 vertex axes (3-fold rotations).
+    let vertex_axes = [
+        // 4 cube-corner axes — vertices of class (±1, ±1, ±1).
+        Vec3::new(1.0, 1.0, 1.0),
+        Vec3::new(1.0, 1.0, -1.0),
+        Vec3::new(1.0, -1.0, 1.0),
+        Vec3::new(-1.0, 1.0, 1.0),
+        // 6 "rectangular" vertex axes — vertices of class (0, ±1/φ, ±φ).
+        Vec3::new(0.0, inv_phi, phi),
+        Vec3::new(0.0, inv_phi, -phi),
+        Vec3::new(inv_phi, phi, 0.0),
+        Vec3::new(inv_phi, -phi, 0.0),
+        Vec3::new(phi, 0.0, inv_phi),
+        Vec3::new(phi, 0.0, -inv_phi),
+    ];
+    for axis in vertex_axes {
+        out.push(Quat::from_axis_angle(axis, 2.0 * PI / 3.0));
+        out.push(Quat::from_axis_angle(axis, 4.0 * PI / 3.0));
+    }
+
+    // 15 edge axes (2-fold rotations) — antipodal-deduped dodec edge
+    // midpoints.
+    for axis in dodec_edge_axes(phi) {
+        out.push(Quat::from_axis_angle(axis, PI));
+    }
+
+    debug_assert_eq!(out.len(), 60, "dodec group size = {}", out.len());
+    out
+}
+
+fn dodec_edge_axes(phi: f64) -> Vec<Vec3> {
+    let inv_phi = 1.0 / phi;
+    let dodec_vertices = [
+        // (±1, ±1, ±1)
+        Vec3::new(1.0, 1.0, 1.0),
+        Vec3::new(1.0, 1.0, -1.0),
+        Vec3::new(1.0, -1.0, 1.0),
+        Vec3::new(1.0, -1.0, -1.0),
+        Vec3::new(-1.0, 1.0, 1.0),
+        Vec3::new(-1.0, 1.0, -1.0),
+        Vec3::new(-1.0, -1.0, 1.0),
+        Vec3::new(-1.0, -1.0, -1.0),
+        // (0, ±1/φ, ±φ)
+        Vec3::new(0.0, inv_phi, phi),
+        Vec3::new(0.0, inv_phi, -phi),
+        Vec3::new(0.0, -inv_phi, phi),
+        Vec3::new(0.0, -inv_phi, -phi),
+        // (±1/φ, ±φ, 0)
+        Vec3::new(inv_phi, phi, 0.0),
+        Vec3::new(inv_phi, -phi, 0.0),
+        Vec3::new(-inv_phi, phi, 0.0),
+        Vec3::new(-inv_phi, -phi, 0.0),
+        // (±φ, 0, ±1/φ)
+        Vec3::new(phi, 0.0, inv_phi),
+        Vec3::new(phi, 0.0, -inv_phi),
+        Vec3::new(-phi, 0.0, inv_phi),
+        Vec3::new(-phi, 0.0, -inv_phi),
+    ];
+    // Dodec edge length = 2/φ; edge length² = 4(2 - φ).
+    let edge_length_sq = 4.0 * (2.0 - phi);
+    let mut axes: Vec<Vec3> = Vec::new();
+    for i in 0..dodec_vertices.len() {
+        for j in (i + 1)..dodec_vertices.len() {
+            let d_sq = (dodec_vertices[i] - dodec_vertices[j]).norm_sq();
+            if (d_sq - edge_length_sq).abs() < 1.0e-9 {
+                let mid = (dodec_vertices[i] + dodec_vertices[j]) * 0.5;
+                let canonical = canonicalize_axis(mid);
+                if !axes.iter().any(|a| (*a - canonical).norm() < 1.0e-9) {
+                    axes.push(canonical);
+                }
+            }
+        }
+    }
+    axes
+}
+
 /// Compute the 15 distinct icosahedral edge axes by walking the
 /// 12 vertices, finding pairs at edge length (distance 2 in our
 /// coordinate system), and deduplicating antipodal midpoints.
@@ -217,10 +336,22 @@ mod tests {
     }
 
     #[test]
+    fn dodecahedral_group_size_60() {
+        assert_eq!(dodecahedral_rotation_group().len(), 60);
+    }
+
+    #[test]
     fn icosahedral_edge_axes_count_15() {
         let phi = f64::midpoint(1.0, 5.0_f64.sqrt());
         let axes = icos_edge_axes(phi);
         assert_eq!(axes.len(), 15, "icos has 15 edge axes (30 edges / 2)");
+    }
+
+    #[test]
+    fn dodecahedral_edge_axes_count_15() {
+        let phi = f64::midpoint(1.0, 5.0_f64.sqrt());
+        let axes = dodec_edge_axes(phi);
+        assert_eq!(axes.len(), 15, "dodec has 15 edge axes (30 edges / 2)");
     }
 
     #[test]

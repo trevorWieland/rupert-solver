@@ -142,15 +142,15 @@ The promotion order on the leaderboard becomes ExactRational ≻ IntervalSnap �
 |---|---|---|---|---|
 | 1. `Expr` type + `eval_f64` | `rupert-core` | ~300 | Low | ✓ shipped |
 | 2. `ExactVec3` + `Polyhedron::exact_vertices` | `rupert-core` | ~150 | Low | ✓ shipped |
-| 3. Migrate 8 shapes to exact tables | `rupert-shapes` | ~200 | Low | partial — dodec/icos done; rest pending |
+| 3. Migrate 8 shapes to exact tables | `rupert-shapes` | ~200 | Low | ✓ shipped (all 8 shapes use `Polyhedron::with_exact`) |
 | 4. `eval_interval` (inari arithmetic + tabulated primitives) | `rupert-core` | ~400 | Medium | ✓ shipped (non-optional inari dep with `libm` backend; `safe_sin/safe_cos` for narrow intervals since gmp needs m4) |
 | 5. `eval_rational` (malachite arithmetic) | `rupert-core` (gated `exact`) | ~150 | Low | pending |
 | 6. Combinatorial-precommit interval hull | `rupert-core` | ~500 | High | ✓ shipped (`hull2d_interval` module with `point_in_interval_polygon_strict` and `convex_hull_interval_certified`) |
-| 7. `certify_interval` for IntervalSnap | `rupert-verify` | ~200 | Medium | pending |
+| 7. `certify_interval` for IntervalSnap | `rupert-verify` | ~200 | Medium | ✓ shipped (`interval_cert.rs`; bench runner attempts it first) |
 | 8. `certify_exact` for ExactRational | `rupert-verify` | ~250 | Medium | pending |
 | 9. Update headline regression to use `IntervalSnap` for noperthedron | `rupert-bench` | ~30 | Low | pending |
 
-Phases 1, 2, 4, 6 done. Remaining: 3 (rest of shape migration), 5 (rational evaluator), 7 (`certify_interval`), 8 (`certify_exact`), 9 (regression upgrade).
+Phases 1, 2, 3, 4, 6, 7 done. Remaining: 5 (rational evaluator), 8 (`certify_exact`), 9 (regression upgrade). See [`roadmap.md`](roadmap.md) for prioritized next steps.
 
 ## Crate layering implication
 
