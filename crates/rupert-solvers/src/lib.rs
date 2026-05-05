@@ -9,6 +9,7 @@
 //!
 //! Adding a solver should NOT touch anything else in the workspace.
 
+pub mod dfo;
 pub mod face_normal_pairs;
 pub mod gosain_grimmer;
 pub mod hopf_grid;

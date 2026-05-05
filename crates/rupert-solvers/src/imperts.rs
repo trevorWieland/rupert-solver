@@ -7,51 +7,37 @@
 //!
 //! ## What `imperts` is
 //!
-//! It is a **refinement** solver — given an existing positive-clearance
-//! seed solution, it searches a tight box of `(Δq_outer, Δq_inner, Δt)`
-//! deltas around the seed and accepts strictly-improving steps. The
-//! upstream binary pulls seeds from a SQLite database produced by
-//! `ruperts.cc` (the discovery engine). Our [`Solver`] trait doesn't
-//! take a seed, so we self-bootstrap: a random-quaternion search until a
-//! first positive-clearance candidate, then the refinement loop.
+//! Refinement solver — given an existing positive-clearance seed,
+//! search a box of `(Δq_outer, Δq_inner, Δt)` deltas around the seed
+//! and accept strictly-improving steps. The upstream binary pulls seeds
+//! from a SQLite database produced by `ruperts.cc` (the discovery
+//! engine). Our [`Solver`] trait doesn't take a seed, so we
+//! self-bootstrap: random-quaternion search until a first
+//! positive-clearance candidate, then the refinement loop.
 //!
-//! ## v1 ↔ upstream diffs
+//! ## Faithful-port story
 //!
-//! - **Inner DFO.** Tom's source uses `Opt::Minimize` from his cc-lib —
-//!   a black-box derivative-free minimizer with `iters=2000, depth=2,
-//!   attempts=100`. We don't have that crate. v1 substitutes a simpler
-//!   *random search inside the box* (uniform delta sampling). Because
-//!   uniform sampling at Tom's wide bounds (`Q=1.0`, `T=0.5`) doesn't
-//!   actually concentrate near the seed, we add **adaptive box
-//!   shrinking** on flat outer iterations — explicitly NOT in the
-//!   upstream source (whose smart DFO doesn't need it). This is the
-//!   v1 deviation that earns this solver its keep without cc-lib.
-//!   v2 work item: port cc-lib's `Opt::Minimize`, drop the adaptive
-//!   shrink, restore Tom's static `Q=1.0, T=0.5`.
+//! v1.5 (this revision) restores Tom's static box bounds `Q=1.0`,
+//! `T=0.5` and replaces our v1's "uniform random box search + adaptive
+//! shrink" inner DFO with [`crate::dfo::opt_minimize`] — a
+//! Nelder-Mead-with-multi-restart that's the closest in-tree analogue
+//! to upstream's `cc-lib::Opt::Minimize<10>(f, lb, ub, iters=2000,
+//! depth=2, attempts=100)`.
+//!
+//! Remaining v1.5 ↔ upstream diffs:
+//!
 //! - **No SQLite seed selection.** Tom's binary picks seeds from a
 //!   global solution database (preferring under-improved shapes); we
 //!   generate one fresh per `solve()` call via random unit-quaternion
 //!   bootstrap.
 //! - **No threading.** Upstream uses 8-thread `ParallelFan`; we honor
 //!   the harness's per-task single-threaded contract (parallelism lives
-//!   in `rupert-bench::sweep` over (shape, solver, seed) triples).
-//!
-//! ## Constants ported verbatim from `imperts.cc`
-//!
-//! - `MAX_OUTER_ITERS = 3000` — outer iteration cap
-//! - `MIN_FLAT_ITERS = 100` — early-stop after 100 flat iters once any
-//!   improvement is found
-//!
-//! ## Constants we adapted (see v1 deviation above)
-//!
-//! - `Q_BOX_INIT = 0.3` — initial half-width for quaternion deltas
-//!   (upstream: `Q = 1.0` static; we shrink)
-//! - `T_BOX_INIT = 0.2` — initial half-width for translation deltas
-//!   (upstream: `T = 0.5` static; we shrink)
-//! - `BOX_SHRINK = 0.7` — geometric decay on flat outer iterations
-//! - `BOX_MIN = 1e-6` — terminate when box shrinks below this
-//! - `INNER_EVALS = 500` — DFO evals per outer iter (upstream: 2000;
-//!   ours converges faster per outer because shrinking adapts the box)
+//!   in `rupert-bench::sweep`).
+//! - **Inner DFO is Nelder-Mead-with-multi-restart, not cc-lib's
+//!   exact algorithm.** Same shape, different internals. Upstream's
+//!   `Opt::Minimize` uses a recursive box-subdivision DFO; ours is
+//!   simpler. v2 work item: port cc-lib if a faithful inner DFO
+//!   matters.
 
 use rand::Rng;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -60,6 +46,7 @@ use rupert_core::{
     Budget, Candidate, EvalCounter, Polyhedron, Quat, Solution, Solver, SolverOutcome,
 };
 
+use crate::dfo::nelder_mead_box;
 use crate::sample::random_unit_quat;
 
 #[derive(Debug, Default)]
@@ -67,16 +54,19 @@ pub struct Imperts;
 
 const MAX_OUTER_ITERS: usize = 3000;
 const MIN_FLAT_ITERS: usize = 100;
-const Q_BOX_INIT: f64 = 0.3;
-const T_BOX_INIT: f64 = 0.2;
-const BOX_SHRINK: f64 = 0.7;
-const BOX_MIN: f64 = 1.0e-6;
-const INNER_EVALS: usize = 500;
-
-/// Maximum random-quaternion attempts to find a starting seed before
-/// giving up. After this we either have a positive-clearance candidate
-/// or we declare the shape too hard for imperts to bootstrap on.
+/// Box half-width on quaternion-component deltas. Verbatim from upstream.
+const Q_BOX: f64 = 1.0;
+/// Box half-width on translation deltas. Verbatim from upstream.
+const T_BOX: f64 = 0.5;
+/// Evaluation budget for one Nelder-Mead restart per outer iteration.
+/// Each outer iter does a single random-start NM; the outer loop itself
+/// provides the multi-restart axis (Tom's `attempts=100` lives in
+/// `MAX_OUTER_ITERS`).
+const INNER_BUDGET: usize = 1_500;
 const MAX_SEED_ATTEMPTS: u64 = 50_000;
+/// Penalty added to the loss when a candidate has non-finite clearance —
+/// keeps the inner DFO's objective continuous.
+const PENALTY_FLOOR: f64 = -10_000.0;
 
 impl Solver for Imperts {
     fn name(&self) -> &'static str {
@@ -84,7 +74,7 @@ impl Solver for Imperts {
     }
 
     fn version(&self) -> &'static str {
-        "0.1.0"
+        "0.2.0"
     }
 
     fn solve(
@@ -103,32 +93,42 @@ impl Solver for Imperts {
         };
 
         // Phase 2 — Tom 7's outer refinement loop. Each outer iter runs
-        // the inner box-DFO over deltas anchored at the current best.
-        // The v1 deviation (adaptive box shrinking) keeps the random
-        // search concentrated as the seed converges.
+        // a multi-restart Nelder-Mead inside a box of deltas anchored at
+        // the current best.
         let mut last_improved: usize = 0;
-        let mut q_box = Q_BOX_INIT;
-        let mut t_box = T_BOX_INIT;
+        let lb: [f64; 10] = [
+            -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -Q_BOX, -T_BOX, -T_BOX,
+        ];
+        let ub: [f64; 10] = [
+            Q_BOX, Q_BOX, Q_BOX, Q_BOX, Q_BOX, Q_BOX, Q_BOX, Q_BOX, T_BOX, T_BOX,
+        ];
         for outer in 0..MAX_OUTER_ITERS {
             if ec.count() >= max {
                 break;
             }
-            let trial = inner_refine(ec, &best_candidate, q_box, t_box, &mut rng, max);
-            let mut improved = false;
-            if let Some((c, cand)) = trial {
-                if c > best_clearance {
-                    best_candidate = cand;
-                    best_clearance = c;
-                    last_improved = outer;
-                    improved = true;
-                }
+            let remaining = max.saturating_sub(ec.count());
+            let inner_budget = (INNER_BUDGET as u64).min(remaining) as usize;
+            if inner_budget < 16 {
+                break;
             }
-            if !improved {
-                q_box *= BOX_SHRINK;
-                t_box *= BOX_SHRINK;
-                if q_box < BOX_MIN {
-                    break;
+            let seed_for_loss = best_candidate;
+            let mut loss = |delta: &[f64]| -> f64 {
+                let cand = apply_delta(&seed_for_loss, delta);
+                let c = ec.evaluate(&cand);
+                if !c.is_finite() {
+                    return -PENALTY_FLOOR;
                 }
+                -c
+            };
+            // Random anchor in the box; the outer loop provides the
+            // multi-restart axis (each iter, fresh start).
+            let start: [f64; 10] = std::array::from_fn(|d| rng.gen_range(lb[d]..ub[d]));
+            let (delta, neg_clearance) = nelder_mead_box(&mut loss, &start, &lb, &ub, inner_budget);
+            let clearance_found = -neg_clearance;
+            if clearance_found.is_finite() && clearance_found > best_clearance {
+                best_candidate = apply_delta(&seed_for_loss, &delta);
+                best_clearance = clearance_found;
+                last_improved = outer;
             }
             if outer > last_improved + MIN_FLAT_ITERS {
                 break;
@@ -168,84 +168,41 @@ fn bootstrap_seed<R: Rng + ?Sized>(
     None
 }
 
-/// Inner DFO: uniform-random-delta sampling in a box around the current
-/// seed. Returns `Some((clearance, candidate))` if any sample strictly
-/// improves on the seed.
-fn inner_refine<R: Rng + ?Sized>(
-    ec: &mut EvalCounter<'_>,
-    seed: &Candidate,
-    q_box: f64,
-    t_box: f64,
-    rng: &mut R,
-    max_evals: u64,
-) -> Option<(f64, Candidate)> {
-    let mut best: Option<(f64, Candidate)> = None;
-    for _ in 0..INNER_EVALS {
-        if ec.count() >= max_evals {
-            return best;
-        }
-        let candidate = sample_delta(seed, q_box, t_box, rng);
-        let c = ec.evaluate(&candidate);
-        if !c.is_finite() {
-            continue;
-        }
-        match best.as_ref() {
-            None => best = Some((c, candidate)),
-            Some((bc, _)) if c > *bc => best = Some((c, candidate)),
-            _ => {}
-        }
-    }
-    best
-}
-
-fn sample_delta<R: Rng + ?Sized>(
-    seed: &Candidate,
-    q_box: f64,
-    t_box: f64,
-    rng: &mut R,
-) -> Candidate {
-    let dq_o = quat_delta(rng, q_box);
-    let dq_i = quat_delta(rng, q_box);
-    let outer = (Quat::new(
-        seed.outer.w + dq_o.0,
-        seed.outer.x + dq_o.1,
-        seed.outer.y + dq_o.2,
-        seed.outer.z + dq_o.3,
-    ))
-    .normalized();
-    let inner = (Quat::new(
-        seed.inner.w + dq_i.0,
-        seed.inner.x + dq_i.1,
-        seed.inner.y + dq_i.2,
-        seed.inner.z + dq_i.3,
-    ))
-    .normalized();
+/// Apply a 10-component delta to a seed candidate. Renormalizes
+/// quaternions; falls back to identity on the (vanishingly unlikely)
+/// zero-quat case.
+fn apply_delta(seed: &Candidate, delta: &[f64]) -> Candidate {
+    debug_assert_eq!(delta.len(), 10);
+    let outer = Quat::new(
+        seed.outer.w + delta[0],
+        seed.outer.x + delta[1],
+        seed.outer.y + delta[2],
+        seed.outer.z + delta[3],
+    );
+    let inner = Quat::new(
+        seed.inner.w + delta[4],
+        seed.inner.x + delta[5],
+        seed.inner.y + delta[6],
+        seed.inner.z + delta[7],
+    );
     let outer = if outer.norm_sq() < 1e-30 {
         Quat::IDENTITY
     } else {
-        outer
+        outer.normalized()
     };
     let inner = if inner.norm_sq() < 1e-30 {
         Quat::IDENTITY
     } else {
-        inner
+        inner.normalized()
     };
-    let dx = rng.gen_range(-t_box..t_box);
-    let dy = rng.gen_range(-t_box..t_box);
     Candidate {
         outer,
         inner,
-        translation: [seed.translation[0] + dx, seed.translation[1] + dy],
+        translation: [
+            seed.translation[0] + delta[8],
+            seed.translation[1] + delta[9],
+        ],
     }
-}
-
-fn quat_delta<R: Rng + ?Sized>(rng: &mut R, q_box: f64) -> (f64, f64, f64, f64) {
-    (
-        rng.gen_range(-q_box..q_box),
-        rng.gen_range(-q_box..q_box),
-        rng.gen_range(-q_box..q_box),
-        rng.gen_range(-q_box..q_box),
-    )
 }
 
 #[cfg(test)]
@@ -276,10 +233,9 @@ mod tests {
 
     #[test]
     fn refines_above_random_quat_clearance() {
-        // Imperts should find a passage with a *larger* clearance margin
-        // than a single random_quat draw — that's the whole point of the
-        // refiner. Run on cube; assert clearance > 0.05 (random_quat
-        // typical cube clearance is ~0.02).
+        // After Nelder-Mead-with-multi-restart inside the upstream-bounds
+        // delta box, imperts should clearly beat random_quat's typical
+        // ~0.02 cube clearance. Target: > 0.05.
         let mut solver = Imperts;
         let p = rupert_shapes::cube();
         let mut ec = EvalCounter::new(&p);
