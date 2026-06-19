@@ -1,12 +1,13 @@
 //! rupert-verify — snap-and-certify verifier.
 //!
-//! v1 ships [`CertMethod::F64Epsilon`]: recompute the candidate's clearance
-//! against the polyhedron in `f64`, accept if margin > [`F64_EPS`]. The
-//! interval and exact paths are gated behind feature flags and arrive in v2.
+//! Recompute solver candidates and assign the strongest certification tier
+//! available: `ExactRational`, then `IntervalSnap`, then `F64Epsilon`.
 
+pub mod exact_cert;
 pub mod fallback_f64;
 pub mod interval_cert;
 
+pub use exact_cert::certify_exact;
 pub use interval_cert::certify_interval;
 
 use rupert_core::{CertMethod, Certification, Polyhedron, Solution, evaluate_clearance};
@@ -117,7 +118,7 @@ mod tests {
         let mut solver = FaceNormalPairs;
         let mut ec = EvalCounter::new(&poly);
         let outcome = solver.solve(&poly, &budget(110_000, 0), &mut ec);
-        let SolverOutcome::Found(sol) = outcome else {
+        let SolverOutcome::Found { solution: sol, .. } = outcome else {
             unreachable!("FaceNormalPairs failed to solve cube");
         };
         let cert = certify(&sol, &poly).expect("certify");
@@ -146,7 +147,10 @@ mod tests {
         let mut solver = FaceNormalPairs;
         let mut ec = EvalCounter::new(&poly);
         let outcome = solver.solve(&poly, &budget(110_000, 0), &mut ec);
-        let SolverOutcome::Found(mut sol) = outcome else {
+        let SolverOutcome::Found {
+            solution: mut sol, ..
+        } = outcome
+        else {
             unreachable!("FaceNormalPairs failed to solve cube");
         };
         sol.clearance = 999.0;

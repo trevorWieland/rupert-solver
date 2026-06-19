@@ -76,11 +76,11 @@ impl Solver for GosainGrimmer {
         let max = budget.max_evaluations.get();
         loop {
             if ec.count() >= max {
-                return SolverOutcome::Exhausted;
+                return SolverOutcome::exhausted();
             }
             let x_init = random_init(&mut rng);
             if let Some(sol) = run_one_restart(ec, x_init, max) {
-                return SolverOutcome::Found(sol);
+                return SolverOutcome::found(sol);
             }
         }
     }
@@ -247,7 +247,7 @@ mod tests {
             let mut solver = GosainGrimmer;
             let mut ec = EvalCounter::new(&p);
             let outcome = solver.solve(&p, &budget(50_000, seed), &mut ec);
-            if matches!(outcome, SolverOutcome::Found(_)) {
+            if matches!(outcome, SolverOutcome::Found { .. }) {
                 hits += 1;
             }
         }

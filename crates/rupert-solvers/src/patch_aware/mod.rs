@@ -28,18 +28,24 @@
 //!    Hamming-distance penalty for staying in patch.
 //! 5. **Cross-patch search**: serial scan of all (outer, inner) cells.
 //!
-//! ## v0.2.0 path (deliberately deferred)
+//! ## v0.3.0 path
 //!
-//! - Branch-and-bound across patches via interval-arithmetic upper
-//!   bounds (uses [`rupert_core::hull2d_interval`]).
-//! - Adaptive per-pair budget.
+//! - Branch-and-bound across patches via deterministic support-width
+//!   upper bounds and quaternion subcell subdivision.
+//! - Adaptive per-pair budgeting runs a shallow pass over ranked cells,
+//!   then reallocates remaining budget to the top positive/near-miss cells.
 //! - Cell-walking SO(3) enumeration.
 //! - Plug `IntervalSnap` certification for patch_aware-found candidates.
 
+mod bounds;
+mod cell_record;
+mod fallback;
 mod optimize;
 mod table;
 
-use rupert_core::{Budget, EvalCounter, Polyhedron, Solution, Solver, SolverOutcome};
+use rupert_core::{
+    Budget, EvalCounter, Polyhedron, Solution, Solver, SolverOutcome, SolverTelemetry,
+};
 
 #[derive(Debug, Default)]
 pub struct PatchAware;
@@ -50,7 +56,7 @@ impl Solver for PatchAware {
     }
 
     fn version(&self) -> &'static str {
-        "0.1.0"
+        "0.3.0"
     }
 
     fn solve(
@@ -61,28 +67,27 @@ impl Solver for PatchAware {
     ) -> SolverOutcome {
         let max = budget.max_evaluations.get();
         if poly.faces.is_empty() {
-            return optimize::single_cell_fallback(budget, ec, max);
+            return fallback::single_cell_fallback(budget, ec, max);
         }
 
         let table = table::patch_table_for(poly);
-        let pairs = table.canonical.len() * table.canonical.len();
-        if pairs == 0 {
-            return SolverOutcome::Exhausted;
+        if table.canonical.is_empty() {
+            return SolverOutcome::exhausted();
         }
-        let per_pair_evals = (max.saturating_mul(9) / 10) / (pairs as u64).max(1);
-        if per_pair_evals < 16 {
-            return optimize::single_cell_fallback(budget, ec, max);
-        }
-
-        let result = optimize::scan_cells(&table, ec, budget, max, per_pair_evals);
-        match result {
-            Some((clearance, candidate)) if clearance > 0.0 => SolverOutcome::Found(Solution {
-                candidate,
-                clearance,
-                found_at_eval: ec.count(),
-                certification: None,
-            }),
-            _ => SolverOutcome::Exhausted,
+        let result = optimize::scan_cells(&table, ec, budget, max);
+        let telemetry = Some(SolverTelemetry::PatchAware(result.telemetry));
+        if result.best_clearance > 0.0 {
+            SolverOutcome::Found {
+                solution: Solution {
+                    candidate: result.best_candidate,
+                    clearance: result.best_clearance,
+                    found_at_eval: ec.count(),
+                    certification: None,
+                },
+                telemetry,
+            }
+        } else {
+            SolverOutcome::Exhausted { telemetry }
         }
     }
 }
@@ -110,7 +115,7 @@ mod tests {
         let mut ec = EvalCounter::new(&p);
         let outcome = solver.solve(&p, &budget(150_000, 0), &mut ec);
         assert!(
-            matches!(outcome, SolverOutcome::Found(_)),
+            matches!(outcome, SolverOutcome::Found { .. }),
             "got {outcome:?}"
         );
     }
@@ -128,6 +133,29 @@ mod tests {
     }
 
     #[test]
+    fn emits_full_cell_and_bound_telemetry() {
+        let p = rupert_shapes::cube();
+        let mut solver = PatchAware;
+        let mut ec = EvalCounter::new(&p);
+        let outcome = solver.solve(&p, &budget(5_000, 1), &mut ec);
+        let (SolverOutcome::Found {
+            telemetry: Some(SolverTelemetry::PatchAware(telemetry)),
+            ..
+        }
+        | SolverOutcome::Exhausted {
+            telemetry: Some(SolverTelemetry::PatchAware(telemetry)),
+        }) = outcome
+        else {
+            unreachable!("patch-aware telemetry expected");
+        };
+        assert_eq!(
+            telemetry.cell_summaries.len(),
+            telemetry.recon_cells_evaluated
+        );
+        assert!(telemetry.bound_cells_evaluated > 0);
+    }
+
+    #[test]
     fn shape_with_empty_faces_falls_back() {
         // Custom user-supplied empty-face polyhedron should still solve
         // via the single-cell fallback.
@@ -136,6 +164,6 @@ mod tests {
         let mut solver = PatchAware;
         let mut ec = EvalCounter::new(&p);
         let outcome = solver.solve(&p, &budget(150_000, 0), &mut ec);
-        assert!(matches!(outcome, SolverOutcome::Found(_)));
+        assert!(matches!(outcome, SolverOutcome::Found { .. }));
     }
 }

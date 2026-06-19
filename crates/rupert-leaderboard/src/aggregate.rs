@@ -37,12 +37,15 @@ pub struct AggregatedView {
     pub uncertified: Vec<LeaderboardRow>,
     /// Shapes for which NO solver has produced a certified passage.
     pub open_problems: Vec<String>,
+    /// Best observed clearance for exhausted/open runs.
+    pub open_observations: Vec<LeaderboardRow>,
 }
 
 pub fn aggregate(results: &[RunResult]) -> AggregatedView {
     type Key = (String, String);
     let mut headline_buckets: BTreeMap<Key, Vec<&RunResult>> = BTreeMap::new();
     let mut uncertified_buckets: BTreeMap<Key, Vec<&RunResult>> = BTreeMap::new();
+    let mut open_observation_buckets: BTreeMap<Key, Vec<&RunResult>> = BTreeMap::new();
     let mut shapes_with_certified: std::collections::BTreeSet<String> =
         std::collections::BTreeSet::new();
     let mut all_shapes: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -67,8 +70,9 @@ pub fn aggregate(results: &[RunResult]) -> AggregatedView {
                 uncertified_buckets.entry(key).or_default().push(r);
             }
             RunOutcome::Exhausted => {
-                // Excluded from leaderboard; they signal "solver never
-                // solved this shape with this seed".
+                if r.best_near_miss.is_some() {
+                    open_observation_buckets.entry(key).or_default().push(r);
+                }
             }
         }
     }
@@ -89,12 +93,17 @@ pub fn aggregate(results: &[RunResult]) -> AggregatedView {
         .difference(&shapes_with_certified)
         .cloned()
         .collect();
+    let open_observations = open_observation_buckets
+        .into_iter()
+        .map(|(k, group)| best_row_max_observed(k.0, k.1, &group))
+        .collect();
 
     AggregatedView {
         headline,
         highest_clearance,
         uncertified,
         open_problems,
+        open_observations,
     }
 }
 
@@ -124,7 +133,7 @@ fn best_row_max_clearance(shape: String, solver: String, group: &[&RunResult]) -
     for r in &group[1..] {
         let r_c = clearance_of(r);
         let b_c = clearance_of(best);
-        if r_c > b_c || (r_c == b_c && r.eval_count < best.eval_count) {
+        if r_c > b_c || (r_c == b_c && observed_eval_count(r) < observed_eval_count(best)) {
             best = r;
         }
     }
@@ -148,6 +157,48 @@ fn row_from(shape: String, solver: String, best: &RunResult, samples: usize) -> 
         samples,
         cert_method,
     }
+}
+
+fn best_row_max_observed(shape: String, solver: String, group: &[&RunResult]) -> LeaderboardRow {
+    let clearance_of = |r: &RunResult| {
+        r.best_near_miss
+            .as_ref()
+            .map_or(f64::NEG_INFINITY, |o| o.clearance)
+    };
+    let mut best: &RunResult = group[0];
+    for r in &group[1..] {
+        let r_c = clearance_of(r);
+        let b_c = clearance_of(best);
+        if r_c > b_c || (r_c == b_c && r.eval_count < best.eval_count) {
+            best = r;
+        }
+    }
+    let cert_method = best
+        .best_near_miss
+        .as_ref()
+        .and_then(|o| o.certification.as_ref())
+        .map(|c| c.method);
+    LeaderboardRow {
+        shape,
+        solver,
+        solver_version: best.solver_version.clone(),
+        best_seed: best.seed,
+        best_eval_count: observed_eval_count(best),
+        best_clearance: observed_clearance(best),
+        wall_time_ms: best.wall_time_ms,
+        samples: group.len(),
+        cert_method,
+    }
+}
+
+fn observed_eval_count(best: &RunResult) -> u64 {
+    best.best_near_miss
+        .as_ref()
+        .map_or(best.eval_count, |o| o.observed_at_eval)
+}
+
+fn observed_clearance(best: &RunResult) -> f64 {
+    best.best_near_miss.as_ref().map_or(0.0, |o| o.clearance)
 }
 
 #[cfg(test)]
@@ -192,6 +243,10 @@ mod tests {
             outcome: RunOutcome::Solved,
             eval_count: evals,
             wall_time_ms: 1,
+            best_positive: None,
+            best_near_miss: None,
+            best_boundary: None,
+            telemetry: None,
             solution: Some(Solution {
                 candidate: Candidate::IDENTITY,
                 clearance,
@@ -266,5 +321,29 @@ mod tests {
         assert!((view.highest_clearance[0].best_clearance - 0.20).abs() < 1e-12);
         assert_eq!(view.highest_clearance[0].best_seed, 2);
         assert_eq!(view.highest_clearance[0].best_eval_count, 80);
+    }
+
+    #[test]
+    fn open_observations_rank_near_miss_not_boundary() {
+        let mut boundary = exhausted_run("snub_cube", "patch_aware", 0);
+        boundary.best_boundary = Some(rupert_core::ObservedCandidate {
+            candidate: Candidate::IDENTITY,
+            clearance: 0.0,
+            observed_at_eval: 1,
+            certification: None,
+        });
+        let mut near_miss = exhausted_run("snub_cube", "patch_aware", 1);
+        near_miss.best_near_miss = Some(rupert_core::ObservedCandidate {
+            candidate: Candidate::IDENTITY,
+            clearance: -0.00001,
+            observed_at_eval: 12,
+            certification: None,
+        });
+
+        let view = aggregate(&[boundary, near_miss]);
+
+        assert_eq!(view.open_observations.len(), 1);
+        assert_eq!(view.open_observations[0].best_seed, 1);
+        assert_eq!(view.open_observations[0].best_clearance, -0.00001);
     }
 }

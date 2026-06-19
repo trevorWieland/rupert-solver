@@ -21,6 +21,8 @@ allow = [
   "Zlib",
   "BSL-1.0",
   "CC0-1.0",
+  # malachite is the shipped exact-rational arithmetic backend.
+  "LGPL-3.0-only",
   "OpenSSL",
   "CDLA-Permissive-2.0",
   # cucumber-rs ecosystem ships some BlueOak-licensed support crates.

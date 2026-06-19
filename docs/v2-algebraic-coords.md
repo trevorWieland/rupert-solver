@@ -1,16 +1,16 @@
 # Algebraic Coordinate DSL — v2 Design Notes
 
-This document is **design only**. No implementation yet. Read it if you're about to start work on the v2 verification path or want to know what slot each piece would fill.
+This document records the algebraic-coordinate design that is now implemented. Read it before changing `Expr`, `ExactVec3`, builtin exact vertex tables, or the verifier certification order.
 
 ## Why we need this
 
 Three forces converge:
 
-1. **Snub cube** vertices use the **tribonacci constant** `t ≈ 1.83928675…` (real root of `t³ − t² − t − 1 = 0`). v1 stores it as f64; certifications limited to `CertMethod::F64Epsilon`.
+1. **Snub cube** vertices use the **tribonacci constant** `t ≈ 1.83928675…` (real root of `t³ − t² − t − 1 = 0`).
 2. **Dodecahedron / icosahedron** use the **golden ratio** `φ = (1 + √5)/2`. Same f64 truncation problem.
 3. **Noperthedron** seeds are rational, but the group action `R_z(2πk/15)` introduces sin/cos of rational multiples of π — algebraic numbers of degree 4 over ℚ (more precisely, in the ring ℤ[ζ₁₅] of degree φ(15) = 8). Steininger & Yurkevich's proof leans on interval arithmetic for these rotation matrices, not on full algebraic-number arithmetic.
 
-Without a richer numeric type than f64, our `rupert-verify` cannot honestly certify these shapes via the interval (`inari`) or exact (`malachite`) paths. The headline soundness gate (the noperthedron rejection) still works in v1 because it relies on empirical rejection at f64 epsilon — but if the noperthedron ever certifies a passage, we'd want to invalidate that via exact arithmetic, not just shrug.
+Without a richer numeric type than f64, `rupert-verify` could not honestly certify these shapes via the interval (`inari`) or exact (`malachite`) paths. The shipped DSL gives every builtin an interval-capable vertex table and gives rational-coordinate shapes the stronger exact-rational path.
 
 ## What we are NOT building
 
@@ -56,12 +56,10 @@ impl Expr {
     /// value. For a primitive like Tribonacci, this is a hand-tabulated
     /// known-good interval; for Sin/Cos it's via Taylor-series with
     /// rigorous remainder bounds; for arithmetic it's interval propagation.
-    /// Available behind feature `interval` in `rupert-verify`.
     pub fn eval_interval(&self) -> inari::Interval;
 
     /// Succeeds only for purely rational expressions (no Sqrt/Sin/Cos/Pi
     /// /GoldenRatio/Tribonacci). Returns None on non-rational subexpression.
-    /// Available behind feature `exact` in `rupert-verify`.
     pub fn eval_rational(&self) -> Option<malachite::Rational>;
 }
 ```
@@ -105,10 +103,11 @@ Order by ROI, not by source-code complexity:
 1. **Dodecahedron + icosahedron.** Drop their f64 `PHI` constant; use `Expr::GoldenRatio` in the exact vertex table. No solver behavior change (f64 evaluation produces the same ULP-equivalent f64 vertex array). Verifier gains an `IntervalSnap`-eligible certification path for both shapes.
 2. **Cube + tetrahedron + octahedron.** Already have rational vertices; the upgrade is just wiring `exact_vertices`. Verifier gains an `ExactRational` path for these three shapes.
 3. **Snub cube.** Replace hardcoded `TRIBONACCI` constant with `Expr::Tribonacci`. Verifier gains `IntervalSnap` (not `ExactRational` — tribonacci isn't rational).
-4. **Noperthedron.** Already has integer-rational seeds. The group-action multiplications `R_z(2πk/15) · C_i` use `Expr::Cos/Sin(Mul(...))` for the rotation matrix entries. Verifier gains both `IntervalSnap` (full path) and a partial `ExactRational` (the seeds are rational; the rotated vertices are not).
+4. **Noperthedron.** Already has integer-rational seeds. The group-action multiplications `R_z(2πk/15) · C_i` use `Expr::Cos/Sin(Mul(...))` for the rotation matrix entries. Verifier gains `IntervalSnap`; `ExactRational` does not apply to the rotated vertex table.
 5. **Triakis tetrahedron.** Vertices are rational (k = 5/3 scale factor times integer-coordinate centroid). Easy upgrade.
+6. **Pentagonal icositetrahedron.** Build exact vertices as the snub-cube polar dual, using exact plane equations from the snub-cube face vertices.
 
-After all five, every shape has at least `IntervalSnap` available.
+After these upgrades, every builtin shape has at least `IntervalSnap` available.
 
 ## The hard sub-problem: interval convex hull
 
@@ -131,8 +130,9 @@ Strategy 1 is the right v2 choice. Document strategy 2 as a fallback for patholo
 | Dodecahedron | ✓ | ✓ | ✗ (uses √5) |
 | Icosahedron | ✓ | ✓ | ✗ (uses √5) |
 | Triakis tetrahedron | ✓ | ✓ | ✓ |
+| Pentagonal icositetrahedron | ✓ | ✓ | ✗ (snub-cube dual; uses tribonacci) |
 | Snub cube | ✓ | ✓ | ✗ (uses tribonacci) |
-| Noperthedron | ✓ | ✓ | partial (seeds yes; post-rotation no) |
+| Noperthedron | ✓ | ✓ | ✗ (post-rotation trig expressions) |
 
 The promotion order on the leaderboard becomes ExactRational ≻ IntervalSnap ≻ F64Epsilon. The **headline rank** keeps using just-positive-clearance gating; the cert method is metadata that lets agents compete on "highest cert tier."
 
@@ -142,21 +142,19 @@ The promotion order on the leaderboard becomes ExactRational ≻ IntervalSnap �
 |---|---|---|---|---|
 | 1. `Expr` type + `eval_f64` | `rupert-core` | ~300 | Low | ✓ shipped |
 | 2. `ExactVec3` + `Polyhedron::exact_vertices` | `rupert-core` | ~150 | Low | ✓ shipped |
-| 3. Migrate 8 shapes to exact tables | `rupert-shapes` | ~200 | Low | ✓ shipped (all 8 shapes use `Polyhedron::with_exact`) |
+| 3. Migrate builtin shapes to exact tables | `rupert-shapes` | ~200 | Low | ✓ shipped (all 9 shapes use `Polyhedron::with_exact`) |
 | 4. `eval_interval` (inari arithmetic + tabulated primitives) | `rupert-core` | ~400 | Medium | ✓ shipped (non-optional inari dep with `libm` backend; `safe_sin/safe_cos` for narrow intervals since gmp needs m4) |
-| 5. `eval_rational` (malachite arithmetic) | `rupert-core` (gated `exact`) | ~150 | Low | pending |
+| 5. `eval_rational` (malachite arithmetic) | `rupert-core` | ~150 | Low | ✓ shipped |
 | 6. Combinatorial-precommit interval hull | `rupert-core` | ~500 | High | ✓ shipped (`hull2d_interval` module with `point_in_interval_polygon_strict` and `convex_hull_interval_certified`) |
 | 7. `certify_interval` for IntervalSnap | `rupert-verify` | ~200 | Medium | ✓ shipped (`interval_cert.rs`; bench runner attempts it first) |
-| 8. `certify_exact` for ExactRational | `rupert-verify` | ~250 | Medium | pending |
-| 9. Update headline regression to use `IntervalSnap` for noperthedron | `rupert-bench` | ~30 | Low | pending |
+| 8. `certify_exact` for ExactRational | `rupert-verify` | ~250 | Medium | ✓ shipped |
+| 9. Update headline regression to use verifier rejection for noperthedron | `rupert-bench` | ~30 | Low | ✓ shipped |
 
-Phases 1, 2, 3, 4, 6, 7 done. Remaining: 5 (rational evaluator), 8 (`certify_exact`), 9 (regression upgrade). See [`roadmap.md`](roadmap.md) for prioritized next steps.
+Phases 1–9 are shipped, with `ExactRational` compiled by default. See [`roadmap.md`](roadmap.md) for prioritized next steps.
 
 ## Crate layering implication
 
-`Expr` belongs in `rupert-core`. The interval and rational evaluators are feature-gated behind `interval` and `exact` flags **in `rupert-core`**, not in `rupert-verify`, because shapes in `rupert-shapes` need to evaluate exact vertices in those modes too. `rupert-verify` re-exports the gated functionality.
-
-Currently `inari` and `malachite` are workspace deps gated as optional in `rupert-verify`. The migration moves them to `rupert-core` (still optional, default off) and adds them to `rupert-shapes`'s feature flags transitively.
+`Expr` belongs in `rupert-core`. The interval and rational evaluators are ordinary compiled code in `rupert-core`, because shapes and verifiers both need the same expression semantics. `rupert-verify` owns certification policy and calls into those evaluators.
 
 ## What to NOT do during this work
 
@@ -171,13 +169,9 @@ Currently `inari` and `malachite` are workspace deps gated as optional in `ruper
 3. **Tribonacci as primitive vs. computed root.** We hardcode tribonacci to a known-good interval. An alternative is to store it as `RootOfPolynomial(coefficients)` and use a generic root-isolation algorithm. The latter is more flexible but introduces serious algebraic-number machinery. v2 stays with the hardcoded primitive.
 4. **Performance budget for verification.** Currently F64Epsilon recomputation is microseconds. Interval-arithmetic recomputation is ~10× slower; exact-rational is ~100× slower. Should we cache results or just live with the slower verifier? My lean: live with it; verification is per-result, not per-iteration.
 
-## When we'd start v2
+## Future triggers
 
-Trigger conditions, any one of which justifies starting:
-
-- Someone ports a solver that finds a candidate snub cube passage (we'd want to certify exactly to catch false positives).
-- A new shape lands that requires algebraic-number coordinates beyond what hardcoded f64 can represent precisely.
-- The leaderboard begins to track per-cert-method stratification (e.g. "best ExactRational result on tetrahedron") — that's a feature only useful once the cert methods exist.
-- An agent attempts to demonstrate the formal noperthedron-rejection-via-interval-arithmetic path, mirroring the SageMath certificate from the paper.
-
-Until then, v1's empirical floor (`noperthedron_resists_every_v1_solver` regression) is the soundness story.
+- A new shape needs algebraic-number coordinates beyond the closed primitive set.
+- The verifier needs tighter intervals for a primitive than the current tabulated bounds provide.
+- The leaderboard begins to stratify by cert method beyond the current display column.
+- A refutation-track implementation needs expression export into a proof/certificate format.

@@ -4,10 +4,10 @@ use std::num::NonZeroU64;
 use std::time::{Duration, Instant};
 
 use rupert_core::{
-    Budget, BudgetSnapshot, EvalCounter, HostInfo, Polyhedron, RunOutcome, RunResult,
-    SCHEMA_VERSION, Solver, SolverOutcome,
+    Budget, BudgetSnapshot, Certification, EvalCounter, HostInfo, ObservedCandidate, Polyhedron,
+    RunOutcome, RunResult, SCHEMA_VERSION, Solution, Solver, SolverOutcome,
 };
-use rupert_verify::{certify, certify_interval};
+use rupert_verify::{VerifyError, certify, certify_exact, certify_interval};
 use time::OffsetDateTime;
 
 /// Run `solver` against `poly` once, with the given budget and seed.
@@ -34,34 +34,33 @@ pub fn run_one(
     let wall_time_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
     let eval_count = ec.count();
 
-    let (run_outcome, solution) = match outcome {
-        SolverOutcome::Found(mut sol) => {
-            // Try the strongest verification first (interval arithmetic),
-            // then fall back to F64Epsilon. The interval path requires
-            // exact_vertices on the polyhedron — shapes without it
-            // (custom JSON loads, etc.) skip straight to F64Epsilon.
-            let interval_attempt = if poly.exact_vertices.is_some() {
-                certify_interval(&sol, poly).ok()
-            } else {
-                None
-            };
-            let cert_result = match interval_attempt {
-                Some(cert) => Ok(cert),
-                None => certify(&sol, poly),
-            };
+    let best_positive = certified_observation(ec.best_positive().cloned(), poly);
+    let best_near_miss = ec.best_near_miss().cloned();
+    let best_boundary = ec.best_boundary().cloned();
+
+    let (run_outcome, solution, telemetry) = match outcome {
+        SolverOutcome::Found {
+            solution: mut sol,
+            telemetry,
+        } => {
+            // Try the strongest verification first, then fall back
+            // through weaker certification tiers. Exact and interval
+            // paths require exact_vertices; custom JSON loads skip
+            // straight to F64Epsilon.
+            let cert_result = strongest_certification(&sol, poly);
             match cert_result {
                 Ok(cert) => {
                     sol.certification = Some(cert);
-                    (RunOutcome::Solved, Some(sol))
+                    (RunOutcome::Solved, Some(sol), telemetry)
                 }
                 Err(err) => {
                     let reason = format!("verifier rejected: {err}");
-                    (RunOutcome::Disqualified { reason }, Some(sol))
+                    (RunOutcome::Disqualified { reason }, Some(sol), telemetry)
                 }
             }
         }
-        SolverOutcome::Exhausted => (RunOutcome::Exhausted, None),
-        SolverOutcome::Error(e) => (RunOutcome::from_solver_error(&e), None),
+        SolverOutcome::Exhausted { telemetry } => (RunOutcome::Exhausted, None, telemetry),
+        SolverOutcome::Error(e) => (RunOutcome::from_solver_error(&e), None, None),
     };
 
     RunResult {
@@ -78,14 +77,53 @@ pub fn run_one(
         outcome: run_outcome,
         eval_count,
         wall_time_ms,
+        best_positive,
+        best_near_miss,
+        best_boundary,
+        telemetry,
         solution,
         host: HostInfo::collect(),
+    }
+}
+
+fn certified_observation(
+    observation: Option<ObservedCandidate>,
+    poly: &Polyhedron,
+) -> Option<ObservedCandidate> {
+    let mut obs = observation?;
+    let sol = Solution {
+        candidate: obs.candidate,
+        clearance: obs.clearance,
+        found_at_eval: obs.observed_at_eval,
+        certification: None,
+    };
+    obs.certification = strongest_certification(&sol, poly).ok();
+    Some(obs)
+}
+
+fn strongest_certification(
+    sol: &Solution,
+    poly: &Polyhedron,
+) -> Result<Certification, VerifyError> {
+    if let Ok(cert) = certify_exact(sol, poly) {
+        return Ok(cert);
+    }
+
+    let interval_attempt = if poly.exact_vertices.is_some() {
+        certify_interval(sol, poly).ok()
+    } else {
+        None
+    };
+    match interval_attempt {
+        Some(cert) => Ok(cert),
+        None => certify(sol, poly),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use rupert_solvers::FaceNormalPairs;
+    use rupert_solvers::NelderMead;
     use rupert_solvers::registered_solvers;
 
     use super::*;
@@ -109,8 +147,57 @@ mod tests {
         assert!(result.solution.is_some());
         let sol = result.solution.expect("solution");
         let cert = sol.certification.expect("certification");
-        // Cube has exact_vertices, so the runner promotes to IntervalSnap.
+        // Cube has rational exact_vertices, so the runner promotes to ExactRational.
+        assert_eq!(cert.method, rupert_core::CertMethod::ExactRational);
+    }
+
+    #[test]
+    fn rational_shape_uses_exact_rational_certification() {
+        let p = rupert_shapes::cube();
+        let mut solver = FaceNormalPairs;
+        let result = run_one(
+            &p,
+            &mut solver,
+            NonZeroU64::new(110_000).expect("nz"),
+            0,
+            None,
+        );
+        let sol = result.solution.expect("solution");
+        let cert = strongest_certification(&sol, &p).expect("certification");
+        assert_eq!(cert.method, rupert_core::CertMethod::ExactRational);
+    }
+
+    #[test]
+    fn algebraic_non_rational_shape_falls_back_to_interval_snap() {
+        let p = rupert_shapes::dodecahedron();
+        let mut solver = NelderMead;
+        let result = run_one(
+            &p,
+            &mut solver,
+            NonZeroU64::new(50_000).expect("nz"),
+            0,
+            None,
+        );
+        let sol = result.solution.expect("solution");
+        let cert = strongest_certification(&sol, &p).expect("certification");
         assert_eq!(cert.method, rupert_core::CertMethod::IntervalSnap);
+    }
+
+    #[test]
+    fn f64_only_shape_falls_back_to_f64_epsilon() {
+        let mut p = rupert_shapes::cube();
+        let mut solver = FaceNormalPairs;
+        let result = run_one(
+            &p,
+            &mut solver,
+            NonZeroU64::new(110_000).expect("nz"),
+            0,
+            None,
+        );
+        let sol = result.solution.expect("solution");
+        p.exact_vertices = None;
+        let cert = strongest_certification(&sol, &p).expect("certification");
+        assert_eq!(cert.method, rupert_core::CertMethod::F64Epsilon);
     }
 
     #[test]
@@ -130,10 +217,10 @@ mod tests {
     }
 
     #[test]
-    fn noperthedron_resists_every_v1_solver() {
+    fn noperthedron_candidates_must_not_verify() {
         // Headline soundness regression. The noperthedron from
         // arXiv:2508.18475 is a proven non-Rupert convex polyhedron; if
-        // any v1 solver finds a passage that the verifier accepts, either
+        // any solver finds a passage that the verifier accepts, either
         // (a) the seeds drifted from the paper values, (b) the verifier
         // is broken, or (c) the paper proof is wrong. Test fails on any
         // certified Solved outcome across all five solvers, three seeds,

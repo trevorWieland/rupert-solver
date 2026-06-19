@@ -5,8 +5,8 @@
 //! v2.0 stores it symbolically as `Expr::Tribonacci`, so the
 //! `IntervalSnap` verifier path can recompute via tight intervals.
 //!
-//! Faces are computed at construction time via `chull` (3D convex hull
-//! triangulation): 32 native triangles + 6 squares × 2 = 44 triangles.
+//! Faces are computed at construction time via `chull` and then merged
+//! into native polygon faces: 32 triangles + 6 squares = 38 faces.
 
 use rupert_core::{ExactVec3, Expr, Polyhedron};
 
@@ -59,8 +59,8 @@ fn snub_cube_vertices_exact() -> Vec<ExactVec3> {
 
 pub fn snub_cube() -> Polyhedron {
     let exact = snub_cube_vertices_exact();
-    // Triangulate via chull on the f64 evaluations. Faces consume
-    // f64 vertex coordinates only.
+    // Build native hull faces via chull on the f64 evaluations. Faces
+    // consume f64 vertex coordinates only.
     let f64_vertices: Vec<_> = exact.iter().map(ExactVec3::eval_f64).collect();
     let faces = triangulate_convex_hull(&f64_vertices);
     Polyhedron::with_exact("snub_cube", exact, faces).expect("snub cube vertices are valid")
@@ -76,17 +76,14 @@ mod tests {
     }
 
     #[test]
-    fn face_count_is_triangulation() {
-        // chull triangulates: 32 native triangles + 6 squares × 2 = 44
-        // triangles. patch_aware and face_normal_pairs consume face
-        // normals, so the redundancy is harmless.
-        assert_eq!(snub_cube().face_count(), 44);
+    fn face_count_is_native_hull() {
+        assert_eq!(snub_cube().face_count(), 38);
     }
 
     #[test]
-    fn every_face_is_triangle() {
+    fn faces_are_triangles_or_squares() {
         for f in &snub_cube().faces {
-            assert_eq!(f.len(), 3);
+            assert!(f.len() == 3 || f.len() == 4);
         }
     }
 

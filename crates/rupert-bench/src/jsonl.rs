@@ -99,6 +99,10 @@ mod tests {
             outcome: RunOutcome::Exhausted,
             eval_count: 100,
             wall_time_ms: 1,
+            best_positive: None,
+            best_near_miss: None,
+            best_boundary: None,
+            telemetry: None,
             solution: None,
             host: HostInfo::collect(),
         }

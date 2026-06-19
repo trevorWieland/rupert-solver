@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 use crate::clearance::clearance;
 use crate::poly::Polyhedron;
 use crate::projection::{P2, project_xy, translate_xy};
-use crate::solver::Candidate;
+use crate::solver::{CLEARANCE_EPS, Candidate, ObservedCandidate};
 
 /// Counts every clearance evaluation. Bound by reference to a polyhedron
 /// for the duration of one solver run.
@@ -17,6 +17,9 @@ use crate::solver::Candidate;
 pub struct EvalCounter<'a> {
     poly: &'a Polyhedron,
     count: u64,
+    best_positive: Option<ObservedCandidate>,
+    best_near_miss: Option<ObservedCandidate>,
+    best_boundary: Option<ObservedCandidate>,
     _not_sync: PhantomData<*const ()>,
 }
 
@@ -25,6 +28,9 @@ impl<'a> EvalCounter<'a> {
         Self {
             poly,
             count: 0,
+            best_positive: None,
+            best_near_miss: None,
+            best_boundary: None,
             _not_sync: PhantomData,
         }
     }
@@ -33,7 +39,17 @@ impl<'a> EvalCounter<'a> {
     /// increment the counter by exactly 1.
     pub fn evaluate(&mut self, c: &Candidate) -> f64 {
         self.count += 1;
-        evaluate_clearance(self.poly, c)
+        let clearance = evaluate_clearance(self.poly, c);
+        if clearance.is_finite() {
+            let observation = ObservedCandidate {
+                candidate: *c,
+                clearance,
+                observed_at_eval: self.count,
+                certification: None,
+            };
+            self.record_observation(observation);
+        }
+        clearance
     }
 
     pub fn count(&self) -> u64 {
@@ -42,6 +58,56 @@ impl<'a> EvalCounter<'a> {
 
     pub fn polyhedron(&self) -> &Polyhedron {
         self.poly
+    }
+
+    pub fn best_positive(&self) -> Option<&ObservedCandidate> {
+        self.best_positive.as_ref()
+    }
+
+    pub fn best_near_miss(&self) -> Option<&ObservedCandidate> {
+        self.best_near_miss.as_ref()
+    }
+
+    pub fn best_boundary(&self) -> Option<&ObservedCandidate> {
+        self.best_boundary.as_ref()
+    }
+
+    fn record_observation(&mut self, observation: ObservedCandidate) {
+        if observation.clearance > CLEARANCE_EPS {
+            replace_if_better_positive(&mut self.best_positive, observation);
+        } else if observation.clearance < -CLEARANCE_EPS {
+            replace_if_better_near_miss(&mut self.best_near_miss, observation);
+        } else {
+            replace_if_better_boundary(&mut self.best_boundary, observation);
+        }
+    }
+}
+
+fn replace_if_better_positive(slot: &mut Option<ObservedCandidate>, obs: ObservedCandidate) {
+    if slot
+        .as_ref()
+        .is_none_or(|best| obs.clearance > best.clearance)
+    {
+        *slot = Some(obs);
+    }
+}
+
+fn replace_if_better_near_miss(slot: &mut Option<ObservedCandidate>, obs: ObservedCandidate) {
+    if slot
+        .as_ref()
+        .is_none_or(|best| obs.clearance > best.clearance)
+    {
+        *slot = Some(obs);
+    }
+}
+
+fn replace_if_better_boundary(slot: &mut Option<ObservedCandidate>, obs: ObservedCandidate) {
+    if slot.as_ref().is_none_or(|best| {
+        obs.clearance.abs() < best.clearance.abs()
+            || (obs.clearance.abs() == best.clearance.abs()
+                && obs.observed_at_eval < best.observed_at_eval)
+    }) {
+        *slot = Some(obs);
     }
 }
 
@@ -141,5 +207,41 @@ mod tests {
         ];
         let c = clearance(&inner_pts, &outer_pts);
         assert!((c - 0.5).abs() < 1e-12, "expected ≈ 0.5, got {c}");
+    }
+
+    #[test]
+    fn tracks_observation_classes_separately() {
+        let p = cube();
+        let mut ec = EvalCounter::new(&p);
+        let q_inner = Quat::from_axis_angle(Vec3::Z, std::f64::consts::PI / 4.0);
+
+        let boundary = ec.evaluate(&Candidate::IDENTITY);
+        let near_miss = ec.evaluate(&Candidate {
+            outer: Quat::IDENTITY,
+            inner: q_inner,
+            translation: [0.0, 0.0],
+        });
+        let positive = ec.evaluate(&Candidate {
+            outer: Quat {
+                w: 0.45970084338098305,
+                x: -0.6279630301995544,
+                y: 0.6279630301995544,
+                z: 0.0,
+            },
+            inner: Quat {
+                w: 0.9914448613738104,
+                x: 0.0,
+                y: 0.0,
+                z: 0.13052619222005157,
+            },
+            translation: [0.0, 0.0],
+        });
+
+        assert!(boundary.abs() <= CLEARANCE_EPS);
+        assert!(near_miss < -CLEARANCE_EPS);
+        assert!(positive > CLEARANCE_EPS);
+        assert!(ec.best_boundary().is_some());
+        assert!(ec.best_near_miss().is_some());
+        assert!(ec.best_positive().is_some());
     }
 }

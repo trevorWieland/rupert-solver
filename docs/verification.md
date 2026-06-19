@@ -2,18 +2,18 @@
 
 The verifier (`rupert-verify`) is the integrity layer between solvers and the leaderboard. A solver may report any candidate it wants; the verifier decides whether the leaderboard accepts it — and at what certification tier.
 
-## Two tiers shipped
+## Three tiers shipped
 
 ```text
 ExactRational  ⏵  IntervalSnap  ⏵  F64Epsilon
-   (v0.3.0)        (shipped)        (shipped)
 ```
 
 The bench runner (`rupert_bench::runner::run_one`) attempts the strongest tier available for the polyhedron, falling back as needed:
 
-1. If the polyhedron carries `exact_vertices` (all 8 builtins do), try `certify_interval` → `IntervalSnap`.
-2. Otherwise (or if interval certification rejects), call `certify` → `F64Epsilon`.
-3. If both fail, the run becomes `RunOutcome::Disqualified { reason }`.
+1. If every exact vertex is rational, try `certify_exact` → `ExactRational`.
+2. If the polyhedron carries `exact_vertices`, try `certify_interval` → `IntervalSnap`.
+3. Otherwise (or if interval certification rejects), call `certify` → `F64Epsilon`.
+4. If every tier fails, the run becomes `RunOutcome::Disqualified { reason }`.
 
 The certification method ends up in the `Solution::certification` field and is rendered as a column in `LEADERBOARD.md`.
 
@@ -50,14 +50,14 @@ The combinatorial-precommit pattern is the technique Steininger & Yurkevich use 
 
 Two corner cases:
 
-- **The candidate's f64 quaternion isn't unit-norm.** We treat `q` as singleton intervals, so any drift from `‖q‖ = 1` propagates as a (small) rotation error. v0.3.0 work item: snap `q` to a nearby rational and treat its components as intervals containing both the nearby rational and the original f64.
+- **The candidate's f64 quaternion isn't unit-norm.** IntervalSnap treats `q` as singleton intervals, so any drift from `‖q‖ = 1` propagates as a small rotation error. ExactRational snaps transform coefficients to dyadic rationals for rational-shape verification, but IntervalSnap still uses singleton f64 coefficients.
 - **The exact vertices' algebraic primitives have wider-than-necessary intervals.** Tribonacci is hand-tabulated to ~4 ULPs; if a future shape needs root-isolation algorithms with looser bounds, the certified clearance would tighten only as far as those primitives permit.
 
-For the 8 shipped shapes, neither case bites in practice: cube/tet/octa/triakis are pure rational; dodec/icos use `GoldenRatio` (1-ULP-equivalent enclosure); snub cube uses `Tribonacci` (4-ULP-equivalent enclosure); noperthedron uses rationals + cos/sin of rational multiples of π via the cos/sin Taylor series with rigorous remainder.
+For the exact shipped shapes, neither case bites in practice: cube/tet/octa/triakis are pure rational; dodec/icos use `GoldenRatio` (1-ULP-equivalent enclosure); snub cube and pentagonal icositetrahedron use `Tribonacci`; noperthedron uses rationals + cos/sin of rational multiples of π via the cos/sin Taylor series with rigorous remainder.
 
-## `ExactRational` (roadmapped, not shipped)
+## `ExactRational`
 
-For shapes whose vertices are exact rationals (cube, octa, tet, triakis tet, noperthedron seeds), `certify_exact` would recompute everything in `malachite::Rational`. Slow but bulletproof — the headline regression for the noperthedron would graduate to "no f64 candidate can ever produce a positive-clearance witness against the exact rational polyhedron". See [`roadmap.md`](roadmap.md) §"Exact rational verifier" for design and triggers.
+For shapes whose vertices are exact rationals (cube, octa, tet, triakis tet), `certify_exact` recomputes strict containment in `malachite::Rational` after snapping f64 transform coefficients to dyadic rationals. Slow but stronger than f64 self-consistency. Shapes with trig, golden-ratio, or tribonacci coordinates continue to use `IntervalSnap`.
 
 ## The noperthedron — the verifier's headline correctness gate
 
@@ -71,14 +71,14 @@ The 90 vertices are generated via the order-30 cyclic group action `(-1)^ℓ · 
 
 The headline regression test in `rupert-bench` runs every shipped solver × seed ∈ {0, 1, 2} × 50 000 evals against the noperthedron; the test fails on any `RunOutcome::Solved`. This is the single most important test in the repo. If it ever flips, **the verifier is broken** — that's a P0 bug.
 
-The exact vertices are stored symbolically: rational seeds × `Expr::cos_two_pi_k_over(k, 15)` rotation entries. So the IntervalSnap path *can* run against the noperthedron — and would be the right place to graduate the headline regression in v0.3.0 (currently the regression is empirically robust at 50 000 evals; the IntervalSnap upgrade would make it formally robust at any candidate).
+The exact vertices are stored symbolically: rational seeds × `Expr::cos_two_pi_k_over(k, 15)` rotation entries. So the IntervalSnap path can run against the noperthedron, and solver-reported candidates are only promoted if verification accepts them.
 
 ## The snub cube caveat (still unsolved)
 
-The snub cube remains the open mathematical problem. Vertex coordinates are exact (`Expr::Tribonacci`), so the IntervalSnap path is fully operational; if any solver finds a positive-clearance candidate, the verifier will certify it rigorously. The challenge is finding the candidate at all — patch_aware v0.2.0 still resists at 2M evals, consistent with the open status of the problem since arXiv:2112.13754.
+The snub cube remains the open mathematical problem. Vertex coordinates are exact (`Expr::Tribonacci`), so the IntervalSnap path is fully operational; if any solver finds a positive-clearance candidate, the verifier will certify it rigorously. The challenge is finding the candidate at all — patch_aware v0.3.0 still resists at 2M evals, consistent with the open status of the problem since arXiv:2112.13754.
 
 ## What the verifier integrates with
 
 - `rupert_bench::runner::run_one` calls the strongest available certifier automatically after a solver returns `SolverOutcome::Found`. On certification failure, the run becomes `RunOutcome::Disqualified { reason }`.
 - `rupert verify <results>` re-runs the verifier on stored JSONL files and rewrites them in place.
-- `rupert lead build` excludes uncertified rows from the headline ranking and surfaces the `cert` column (interval / f64ε / —) so contributors can see which results carry the strongest guarantee.
+- `rupert lead build` reads `results/baseline/` by default, excludes uncertified rows from the headline ranking, and surfaces the `cert` column (exact / interval / f64ε / —) so contributors can see which results carry the strongest guarantee. Pass `--results-dir` explicitly to build a scratch leaderboard from another directory.

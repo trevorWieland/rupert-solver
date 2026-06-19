@@ -13,6 +13,7 @@ lcov.info
 # Benchmark outputs — directory is tracked via results/.gitkeep, contents are not.
 /results/*
 !/results/.gitkeep
+!/results/README.md
 !/results/baseline/
 !/results/baseline/**
 

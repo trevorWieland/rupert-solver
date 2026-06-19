@@ -33,6 +33,8 @@ pub use projection::{P2, project_xy, translate_xy};
 pub use quat::Quat;
 pub use runresult::{BudgetSnapshot, HostInfo, RunOutcome, RunResult, SCHEMA_VERSION};
 pub use solver::{
-    Budget, Candidate, CertMethod, Certification, Solution, Solver, SolverError, SolverOutcome,
+    Budget, CLEARANCE_EPS, Candidate, CertMethod, Certification, ClearanceHistogram,
+    ObservedCandidate, PatchAwareBoundHistogram, PatchAwareCellSummary, PatchAwareSkipReason,
+    PatchAwareTelemetry, Solution, Solver, SolverError, SolverOutcome, SolverTelemetry,
 };
 pub use vec3::Vec3;

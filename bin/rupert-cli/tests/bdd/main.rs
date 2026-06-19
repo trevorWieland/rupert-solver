@@ -69,6 +69,76 @@ async fn fabricate_noperthedron_lie(w: &mut CliWorld) {
         .expect("write fabricated result");
 }
 
+#[given(regex = r"^a fabricated patch-aware result on disk$")]
+async fn fabricate_patch_aware_result(w: &mut CliWorld) {
+    use serde_json::json;
+    let dir = w.work_dir.as_ref().expect("fresh_working_dir first");
+    let path = dir.path().join("results").join("test_patch_aware.jsonl");
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    let cell = json!({
+        "outer_cell": 7,
+        "inner_cell": 11,
+        "start_eval": 100,
+        "end_eval": 140,
+        "evals_spent": 40,
+        "recon_clearance": -0.0002,
+        "best_clearance": -0.00001,
+        "skip_reason": "none"
+    });
+    let line = json!({
+        "schema_version": 2,
+        "timestamp_utc": "2026-05-04T00:00:00Z",
+        "poly_id": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
+        "poly_name": "snub_cube",
+        "solver_name": "patch_aware",
+        "solver_version": "0.3.0",
+        "seed": 0,
+        "budget": { "max_evaluations": 1000, "max_wall_time_ms": null },
+        "outcome": { "kind": "exhausted" },
+        "eval_count": 1000,
+        "wall_time_ms": 1,
+        "best_positive": null,
+        "best_near_miss": {
+            "candidate": {
+                "outer": { "w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0 },
+                "inner": { "w": 1.0, "x": 0.0, "y": 0.0, "z": 0.0 },
+                "translation": [0.0, 0.0]
+            },
+            "clearance": -0.00001,
+            "observed_at_eval": 140,
+            "certification": null
+        },
+        "best_boundary": null,
+        "telemetry": {
+            "kind": "patch_aware",
+            "canonical_cells": 12,
+            "cell_pairs": 144,
+            "recon_cells_evaluated": 144,
+            "optimized_cells": 1,
+            "cells_skipped_by_slack": 0,
+            "cells_skipped_by_interval_bound": 0,
+            "best_positive_cell": null,
+            "best_near_miss_cell": cell,
+            "best_boundary_cell": null,
+            "cell_summaries": [cell],
+            "top_cells": [cell],
+            "clearance_histogram": {
+                "neg_inf_to_neg_one": 0,
+                "neg_one_to_neg_point_one": 0,
+                "neg_point_one_to_neg_point_zero_one": 0,
+                "neg_point_zero_one_to_neg_point_zero_zero_one": 1,
+                "neg_point_zero_zero_one_to_zero": 0,
+                "positive": 0
+            }
+        },
+        "solution": null,
+        "host": { "rustc": "x", "target": "x", "git_rev": "x" }
+    });
+    std::fs::write(&path, serde_json::to_string(&line).expect("ser") + "\n")
+        .expect("write fabricated result");
+}
+
 #[when(regex = r#"^I run "rupert (.*)"$"#)]
 async fn run_rupert(w: &mut CliWorld, raw_args: String) {
     let args: Vec<String> = raw_args.split_whitespace().map(String::from).collect();
@@ -139,6 +209,34 @@ async fn certified_record_exists(w: &mut CliWorld) {
         }
     }
     assert!(found, "no Solved+certified record in {}", dir.display());
+}
+
+#[then(regex = r"^a result file uses schema v2 observation classes$")]
+async fn result_uses_schema_v2_observations(w: &mut CliWorld) {
+    let dir = w
+        .work_dir
+        .as_ref()
+        .expect("work dir")
+        .path()
+        .join("results");
+    let mut checked = false;
+    for entry in std::fs::read_dir(&dir).expect("read results") {
+        let entry = entry.expect("entry");
+        let bytes = std::fs::read(entry.path()).expect("read");
+        for line in bytes.split(|b| *b == b'\n') {
+            if line.is_empty() {
+                continue;
+            }
+            let v: serde_json::Value = serde_json::from_slice(line).expect("json");
+            assert_eq!(v["schema_version"].as_u64(), Some(2));
+            assert!(v.get("best_positive").is_some());
+            assert!(v.get("best_near_miss").is_some());
+            assert!(v.get("best_boundary").is_some());
+            assert!(v.get("best_observation").is_none());
+            checked = true;
+        }
+    }
+    assert!(checked, "no result records in {}", dir.display());
 }
 
 #[then(regex = r"^the fabricated record's outcome is now Disqualified$")]

@@ -41,13 +41,13 @@ impl Solver for NelderMead {
         // (outer, inner) pair, then perturbs in a tangent simplex.
         loop {
             if ec.count() >= max {
-                return SolverOutcome::Exhausted;
+                return SolverOutcome::exhausted();
             }
             let base_outer = random_unit_quat(&mut rng);
             let base_inner = random_unit_quat(&mut rng);
             let outcome = run_simplex(&mut rng, ec, base_outer, base_inner, max);
             if let Some(s) = outcome {
-                return SolverOutcome::Found(s);
+                return SolverOutcome::found(s);
             }
         }
     }
@@ -269,7 +269,7 @@ mod tests {
         let mut ec = EvalCounter::new(&p);
         let outcome = solver.solve(&p, &budget(50_000, 7), &mut ec);
         assert!(
-            matches!(outcome, SolverOutcome::Found(_)),
+            matches!(outcome, SolverOutcome::Found { .. }),
             "got {outcome:?}"
         );
     }

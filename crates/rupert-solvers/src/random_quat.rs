@@ -10,8 +10,8 @@ use rupert_core::{Budget, Candidate, EvalCounter, Polyhedron, Solution, Solver, 
 use crate::sample::random_unit_quat;
 
 /// `random_quat` solver. Pure rotation-pair sampling at fixed (0, 0)
-/// translation — the centrally-symmetric solids we ship in v1 have their
-/// optimal translation near origin; combining random translation with
+/// translation — many regular solids have their optimal translation near
+/// origin; combining random translation with
 /// random rotation makes the hit rate disastrously low. Translation search
 /// is the job of `random_then_refine`'s phase 2.
 #[derive(Debug, Default)]
@@ -49,7 +49,7 @@ impl Solver for RandomQuat {
             };
             let c = ec.evaluate(&candidate);
             if c.is_finite() && c > 0.0 {
-                return SolverOutcome::Found(Solution {
+                return SolverOutcome::found(Solution {
                     candidate,
                     clearance: c,
                     found_at_eval: ec.count(),
@@ -57,7 +57,7 @@ impl Solver for RandomQuat {
                 });
             }
         }
-        SolverOutcome::Exhausted
+        SolverOutcome::exhausted()
     }
 }
 
@@ -91,7 +91,7 @@ mod tests {
             let mut solver = RandomQuat;
             let mut ec = EvalCounter::new(&p);
             let outcome = solver.solve(&p, &budget(10_000, seed), &mut ec);
-            if matches!(outcome, SolverOutcome::Found(_)) {
+            if matches!(outcome, SolverOutcome::Found { .. }) {
                 hits += 1;
             }
         }
@@ -111,10 +111,11 @@ mod tests {
         let count_b = ec2.count();
         assert_eq!(count_a, count_b);
         let determinism_ok = match (outcome_a, outcome_b) {
-            (SolverOutcome::Found(a), SolverOutcome::Found(b)) => {
-                a.found_at_eval == b.found_at_eval && a.candidate == b.candidate
-            }
-            (SolverOutcome::Exhausted, SolverOutcome::Exhausted) => true,
+            (
+                SolverOutcome::Found { solution: a, .. },
+                SolverOutcome::Found { solution: b, .. },
+            ) => a.found_at_eval == b.found_at_eval && a.candidate == b.candidate,
+            (SolverOutcome::Exhausted { .. }, SolverOutcome::Exhausted { .. }) => true,
             _ => false,
         };
         assert!(determinism_ok, "non-deterministic outcome");
@@ -123,6 +124,5 @@ mod tests {
     // Note: exhaustion-against-hard-shapes regression lives in
     // `rupert-bench` rather than per-solver, since the property we care
     // about is fleet-wide ("no solver finds a passage") rather than
-    // solver-specific. The v1 noperthedron placeholder is not a proven
-    // nopert (see rupert-shapes::noperthedron module docs).
+    // solver-specific.
 }

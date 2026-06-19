@@ -5,9 +5,9 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::polyid::PolyId;
-use crate::solver::{Solution, SolverError};
+use crate::solver::{ObservedCandidate, Solution, SolverError, SolverTelemetry};
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunResult {
@@ -22,6 +22,10 @@ pub struct RunResult {
     pub outcome: RunOutcome,
     pub eval_count: u64,
     pub wall_time_ms: u64,
+    pub best_positive: Option<ObservedCandidate>,
+    pub best_near_miss: Option<ObservedCandidate>,
+    pub best_boundary: Option<ObservedCandidate>,
+    pub telemetry: Option<SolverTelemetry>,
     pub solution: Option<Solution>,
     pub host: HostInfo,
 }

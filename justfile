@@ -1,4 +1,4 @@
-# rupert-solver task runner. `just ci` is the single gate.
+# rupert-solver task runner. `just check` is the fast loop; `just ci` is the full gate.
 
 cargo := "cargo"
 
@@ -40,9 +40,12 @@ fmt-check:
 clippy:
     {{cargo}} clippy --workspace --all-targets -- -D warnings
 
-# Cargo check.
-check:
+# Cargo check only.
+cargo-check:
     {{cargo}} check --workspace --all-targets
+
+# Fast regular gate: formatting, compilation, clippy, and workspace policy checks.
+check: fmt-check cargo-check clippy xtask-all
 
 # Run tests: nextest for libtest binaries, plain cargo test for the
 # cucumber BDD harnesses (which use harness=false and don't expose
@@ -58,6 +61,7 @@ xtask-all:
     {{cargo}} run -p xtask -- check-deps
     {{cargo}} run -p xtask -- check-lines
     {{cargo}} run -p xtask -- check-cargo-fields
+    {{cargo}} run -p xtask -- check-solver-eval
 
 # License + advisory + sources.
 deny:
@@ -76,10 +80,55 @@ doc:
     RUSTDOCFLAGS="-D warnings" {{cargo}} doc --workspace --no-deps
 
 # Single CI gate.
-ci: fmt-check clippy xtask-all deny machete test
+ci: check deny machete test doc
 
-# Run every solver against every shape, then rebuild the leaderboard.
-sweep:
-    {{cargo}} run --release -p rupert-cli -- run --all --budget-evals 50000
-    {{cargo}} run --release -p rupert-cli -- verify results
+# Refresh the curated baseline: run every solver against every shape, verify,
+# then rebuild the leaderboard from results/baseline.
+baseline-sweep:
+    {{cargo}} run --release -p rupert-cli -- run --all --budget-evals 50000 --out-dir results/baseline
+    {{cargo}} run --release -p rupert-cli -- verify results/baseline
     {{cargo}} run --release -p rupert-cli -- lead build
+
+# Backward-compatible alias for the curated baseline-producing sweep.
+sweep: baseline-sweep
+
+# Easy known-Rupert calibration: all solvers × easy positives × seeds 0..7.
+calibrate-easy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shapes=(cube octahedron dodecahedron icosahedron)
+    solvers=(random_quat face_normal_pairs nelder_mead random_then_refine hopf_grid imperts gosain_grimmer patch_aware)
+    for shape in "${shapes[@]}"; do
+      for solver in "${solvers[@]}"; do
+        {{cargo}} run --release -p rupert-cli -- run --shape "$shape" --solver "$solver" --seed 0 --seed 1 --seed 2 --seed 3 --seed 4 --seed 5 --seed 6 --seed 7 --budget-evals 50000
+      done
+    done
+
+# Hard known-Rupert calibration: selected solvers × hard positives × seeds 0..15.
+calibrate-hard:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shapes=(triakis_tetrahedron pentagonal_icositetrahedron)
+    solvers=(nelder_mead random_then_refine imperts gosain_grimmer patch_aware)
+    for shape in "${shapes[@]}"; do
+      for solver in "${solvers[@]}"; do
+        {{cargo}} run --release -p rupert-cli -- run --shape "$shape" --solver "$solver" --seed 0 --seed 1 --seed 2 --seed 3 --seed 4 --seed 5 --seed 6 --seed 7 --seed 8 --seed 9 --seed 10 --seed 11 --seed 12 --seed 13 --seed 14 --seed 15 --budget-evals 10000000
+      done
+    done
+
+# Snub cube telemetry pilot: patch-aware × seeds 0..3 × 2M evals.
+snub-pilot:
+    {{cargo}} run --release -p rupert-cli -- run --shape snub_cube --solver patch_aware --seed 0 --seed 1 --seed 2 --seed 3 --budget-evals 2000000
+
+# Snub cube hunt: patch-aware × seeds 0..15 × 10M evals.
+snub-hunt:
+    {{cargo}} run --release -p rupert-cli -- run --shape snub_cube --solver patch_aware --seed 0 --seed 1 --seed 2 --seed 3 --seed 4 --seed 5 --seed 6 --seed 7 --seed 8 --seed 9 --seed 10 --seed 11 --seed 12 --seed 13 --seed 14 --seed 15 --budget-evals 10000000
+
+# Proven non-Rupert control: all solvers × noperthedron × seeds 0..7.
+nopert-control:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    solvers=(random_quat face_normal_pairs nelder_mead random_then_refine hopf_grid imperts gosain_grimmer patch_aware)
+    for solver in "${solvers[@]}"; do
+      {{cargo}} run --release -p rupert-cli -- run --shape noperthedron --solver "$solver" --seed 0 --seed 1 --seed 2 --seed 3 --seed 4 --seed 5 --seed 6 --seed 7 --budget-evals 50000
+    done

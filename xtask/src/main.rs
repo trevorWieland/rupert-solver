@@ -3,6 +3,7 @@
 mod check_cargo_fields;
 mod check_deps;
 mod check_lines;
+mod check_solver_eval;
 mod check_suppression;
 mod check_test_surface;
 
@@ -18,7 +19,7 @@ struct Cli {
 
 #[derive(Parser, Debug)]
 enum Command {
-    /// Reject inline #[allow] / #[expect] / #![allow] in workspace source.
+    /// Reject inline `#[allow]` / `#[expect]` / `#![allow]` in workspace source.
     CheckSuppression,
     /// Enforce per-crate test surface (bdd vs rust) per `xtask/test-surface.toml`.
     CheckRustTestSurface,
@@ -28,6 +29,8 @@ enum Command {
     CheckLines,
     /// Reject Cargo.toml files missing inherited workspace fields.
     CheckCargoFields,
+    /// Reject solvers that bypass EvalCounter.
+    CheckSolverEval,
 }
 
 fn main() -> Result<()> {
@@ -38,6 +41,7 @@ fn main() -> Result<()> {
         Command::CheckDeps => check_deps::run()?,
         Command::CheckLines => check_lines::run()?,
         Command::CheckCargoFields => check_cargo_fields::run()?,
+        Command::CheckSolverEval => check_solver_eval::run()?,
     }
     Ok(())
 }

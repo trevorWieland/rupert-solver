@@ -1,13 +1,13 @@
 //! Patch-table construction and per-shape caching.
 
-use std::collections::{HashMap, hash_map::DefaultHasher};
-use std::hash::{Hash, Hasher};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rand_xoshiro::rand_core::SeedableRng;
 use rupert_core::symmetry::{
-    icosahedral_rotation_group, octahedral_rotation_group, tetrahedral_rotation_group,
+    dodecahedral_rotation_group, icosahedral_rotation_group, octahedral_rotation_group,
+    tetrahedral_rotation_group,
 };
 use rupert_core::{PolyId, Polyhedron, Quat, Vec3};
 
@@ -35,7 +35,9 @@ pub(super) struct CanonicalPatch {
 #[derive(Debug)]
 pub(super) struct PatchTable {
     pub canonical: Vec<CanonicalPatch>,
+    pub vertices: Vec<Vec3>,
     pub normals: Vec<Vec3>,
+    pub max_vertex_norm: f64,
 }
 
 /// Internal name → rotation group dispatch. Mirrors
@@ -45,11 +47,11 @@ pub(super) struct PatchTable {
 pub(super) fn rotation_group_for(name: &str) -> Vec<Quat> {
     match name {
         "tetrahedron" | "triakis_tetrahedron" => tetrahedral_rotation_group(),
-        "cube" | "octahedron" | "snub_cube" => octahedral_rotation_group(),
+        "cube" | "octahedron" | "snub_cube" | "pentagonal_icositetrahedron" => {
+            octahedral_rotation_group()
+        }
         "icosahedron" => icosahedral_rotation_group(),
-        // Dodec uses different rotation axes than icos in our coords;
-        // patch_aware runs without symmetry reduction on dodec until
-        // a dedicated dodecahedral group lands (v0.3.0).
+        "dodecahedron" => dodecahedral_rotation_group(),
         _ => vec![Quat::IDENTITY],
     }
 }
@@ -92,12 +94,12 @@ pub(super) fn face_sign_vector(normals: &[Vec3], q: &Quat) -> u128 {
 /// Brute-force patch enumeration with stagnation stop.
 pub(super) fn enumerate_patches(normals: &[Vec3], shape_seed: u64) -> Vec<PatchEntry> {
     let mut rng = Xoshiro256PlusPlus::seed_from_u64(shape_seed);
-    let mut table: HashMap<u128, Quat> = HashMap::new();
+    let mut table: BTreeMap<u128, Quat> = BTreeMap::new();
     let mut stagnation = 0_usize;
     for _ in 0..MAX_ENUM_SAMPLES {
         let q = random_unit_quat(&mut rng);
         let sv = face_sign_vector(normals, &q);
-        if let std::collections::hash_map::Entry::Vacant(e) = table.entry(sv) {
+        if let std::collections::btree_map::Entry::Vacant(e) = table.entry(sv) {
             e.insert(q);
             stagnation = 0;
         } else {
@@ -132,7 +134,7 @@ pub(super) fn canonicalize_under_symmetry(
             })
             .collect();
     }
-    let mut canonical_key_for: HashMap<u128, u128> = HashMap::new();
+    let mut canonical_key_for: BTreeMap<u128, u128> = BTreeMap::new();
     for entry in patches {
         let mut min_sv = entry.sign_vec;
         for g in group.iter().skip(1) {
@@ -144,7 +146,7 @@ pub(super) fn canonicalize_under_symmetry(
         }
         canonical_key_for.insert(entry.sign_vec, min_sv);
     }
-    let mut canonical_map: HashMap<u128, Quat> = HashMap::new();
+    let mut canonical_map: BTreeMap<u128, Quat> = BTreeMap::new();
     for entry in patches {
         let canonical_sv = *canonical_key_for
             .get(&entry.sign_vec)
@@ -164,9 +166,10 @@ pub(super) fn canonicalize_under_symmetry(
 }
 
 fn shape_seed(name: &str) -> u64 {
-    let mut h = DefaultHasher::new();
-    name.hash(&mut h);
-    h.finish()
+    let hash = blake3::hash(name.as_bytes());
+    let mut bytes = [0_u8; 8];
+    bytes.copy_from_slice(&hash.as_bytes()[0..8]);
+    u64::from_le_bytes(bytes)
 }
 
 fn cache() -> &'static Mutex<HashMap<PolyId, Arc<PatchTable>>> {
@@ -183,13 +186,22 @@ pub(super) fn patch_table_for(poly: &Polyhedron) -> Arc<PatchTable> {
         }
     }
     let normals = face_normals(poly);
+    let max_vertex_norm = poly
+        .vertices
+        .iter()
+        .map(|v| v.norm())
+        .fold(0.0_f64, f64::max);
     let raw = enumerate_patches(&normals, shape_seed(&poly.name));
     let group = rotation_group_for(&poly.name);
     let canonical = canonicalize_under_symmetry(&raw, &group, &normals);
-    let table = Arc::new(PatchTable { canonical, normals });
+    let table = Arc::new(PatchTable {
+        canonical,
+        vertices: poly.vertices.clone(),
+        normals,
+        max_vertex_norm,
+    });
     let mut map = cache().lock().expect("cache mutex");
-    map.entry(key).or_insert_with(|| Arc::clone(&table));
-    table
+    Arc::clone(map.entry(key).or_insert(table))
 }
 
 #[cfg(test)]

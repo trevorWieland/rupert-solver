@@ -104,11 +104,12 @@ mod tests {
 Then:
 
 ```bash
-just c                                # workspace clippy
-just t                                # workspace nextest
+just check                            # fast workspace gate
+just ci                               # full local gate before committing
 cargo run --release -p rupert-cli -- run \
-    --shape cube --solver my_new_solver --seed 0 --budget-evals 50000
-cargo run --release -p rupert-cli -- verify results
+    --shape cube --solver my_new_solver --seed 0 --budget-evals 50000 \
+    --out-dir results/baseline
+cargo run --release -p rupert-cli -- verify results/baseline
 cargo run --release -p rupert-cli -- lead build
 ```
 

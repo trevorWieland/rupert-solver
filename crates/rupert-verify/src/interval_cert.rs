@@ -28,8 +28,8 @@
 //!   gives a strictly-positive *lower bound* on clearance. The true
 //!   clearance is provably positive — Rupert passage is real.
 //!
-//! Available only for polyhedra with `exact_vertices` populated. v0.1
-//! `with_exact` constructors cover all 8 builtins.
+//! Available only for polyhedra with `exact_vertices` populated. The
+//! builtin `with_exact` constructors cover all shipped builtins.
 
 use inari::Interval;
 use rupert_core::hull2d_interval::{
@@ -93,7 +93,7 @@ pub fn certify_interval(
         }
     }
 
-    if !clearance_lo.is_finite() || clearance_lo <= 0.0 {
+    if !clearance_lo.is_finite() || clearance_lo <= crate::F64_EPS {
         return Err(VerifyError::NotStrictlyPositive(
             clearance_lo,
             crate::F64_EPS,
@@ -227,7 +227,7 @@ mod tests {
         let mut solver = FaceNormalPairs;
         let mut ec = EvalCounter::new(&poly);
         let outcome = solver.solve(&poly, &budget(110_000, 0), &mut ec);
-        let SolverOutcome::Found(sol) = outcome else {
+        let SolverOutcome::Found { solution: sol, .. } = outcome else {
             unreachable!("FaceNormalPairs failed to solve cube");
         };
         let cert = certify_interval(&sol, &poly).expect("interval cert");

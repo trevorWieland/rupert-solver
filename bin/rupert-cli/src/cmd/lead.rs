@@ -13,10 +13,10 @@ pub(crate) struct LeadArgs {
 
 #[derive(clap::Subcommand, Debug)]
 pub(crate) enum LeadCommand {
-    /// Read `results/*.jsonl` and write `LEADERBOARD.md`.
+    /// Read curated baseline JSONL results and write `LEADERBOARD.md`.
     Build {
         /// Source results directory.
-        #[arg(long, default_value = "results")]
+        #[arg(long, default_value = "results/baseline")]
         results_dir: PathBuf,
         /// Output Markdown file.
         #[arg(long, default_value = "LEADERBOARD.md")]

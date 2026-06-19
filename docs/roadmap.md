@@ -12,44 +12,43 @@ Ordered by leverage (impact ÷ effort), with explicit dependencies.
 
 ### v0.3.0 — Branch-and-bound across patch_aware cells
 
-**Status**: not started. Highest leverage item on the list.
+**Status**: shipped as the first hunt-ready pass. v0.3.0 ships deterministic patch tables, full-cell telemetry, adaptive refinement of top near-miss cells, and deterministic upper-bound pruning.
 
-**What.** Today `patch_aware` v0.2.0 reconnaissance-first scans cells in score order and skips those whose recon score lags `best_so_far` by more than `SKIP_SLACK = 0.5`. That heuristic prunes by the *anchor sample alone*. The next step is to replace the heuristic with an **interval upper bound** on per-cell clearance:
+**What.** `patch_aware` v0.3.0 reconnaissance-first scans cells in score order, records cell telemetry, and reallocates remaining budget to top positive/near-miss cells. It skips cells using the slack heuristic plus a deterministic branch bound:
 
-- For each canonical (outer, inner) cell, build an `IntervalP2` shadow projection where the rotation is allowed to vary across the entire 0.15-wide quat-delta box around the patch anchor. The result is a polygon whose vertices are wider intervals than the IntervalSnap path (which uses singleton f64 quaternions).
-- Compute an interval upper bound on signed clearance over that box (via `convex_hull_interval_certified` and the interval signed-distance pipeline already in `rupert-verify::interval_cert`).
-- If the upper bound is ≤ `best_so_far`, **skip the cell** without spending a single Nelder-Mead step. This is exact pruning, not a heuristic.
+- For each canonical (outer, inner) cell, bound the projection movement induced by quaternion delta boxes.
+- Recursively subdivide the quaternion box into deterministic subcells.
+- Compute support-width containment upper bounds across fixed projection directions.
+- If the upper bound is ≤ `best_so_far`, skip the cell without spending a Nelder-Mead step.
+- Record bound attempts, ambiguous bounds, pruned cells, and upper-bound gap distribution in patch-aware telemetry.
 
 **Why.** On the snub cube (1296 cells × ~1500 evals/cell ≈ 2M evals to fully scan), even cutting 50% of cells via rigorous bounds gets us to 1M evals on cells that *might* yield a passage. Combined with adaptive per-cell budgets (give pruned-but-not-skipped cells more evals), this is the realistic path to either finding a snub cube passage *or* proving none exists in some patch product.
 
-**Crate(s)**: `rupert-solvers` (uses `rupert-verify`'s interval primitives).
+**Crate(s)**: `rupert-solvers`.
 
-**Estimated effort**: 800–1200 LOC. The interval projection over a quat-delta box (rather than a singleton quat) is the new piece; the rest reuses existing machinery.
+**Follow-up.** If pilot data shows most upper bounds remain ambiguous, the next refinement is to replace the Lipschitz support-width bound with a true interval projection over each quat-delta subcell and reuse `convex_hull_interval_certified` for tighter combinatorial hull reasoning.
 
-**Risk**: medium. The bounds might be too loose on cells with 0.15 wide deltas — empirically open. If too loose, narrow the delta box at the cost of more cells (subdivide patches into sub-cells).
+**Risk**: medium. The bound is safe and deterministic, but may still be too wide on 0.15-wide deltas. The telemetry is explicitly designed to tell us whether to tighten the bound, narrow the delta box, or spend more budget on adaptive refinement.
 
 ### v0.3.0 — `certify_exact` via malachite
 
-**Status**: pending. `Cargo.toml` already gates `malachite` behind `exact`.
+**Status**: shipped by default for rational-coordinate shapes.
 
-**What.** For shapes whose vertices are pure rationals (cube, tetrahedron, octahedron, triakis tetrahedron, noperthedron seeds), recompute the projection-hull-clearance pipeline in `malachite::Rational`. No floating point, no rounding error. The result is a Boolean: rational clearance is either > 0 or ≤ 0; we don't get an approximation, we get the truth.
+**What.** For shapes whose vertices are pure rationals (cube, tetrahedron, octahedron, triakis tetrahedron), recompute the projection-hull-containment pipeline in `malachite::Rational` after snapping the f64 candidate transform to dyadic rationals. No floating-point containment predicate remains in this tier. Shapes with golden-ratio, tribonacci, or trigonometric coordinates fall back to `IntervalSnap`.
 
-The challenge: the candidate quaternion is f64. Two options:
+The candidate quaternion is f64, so this path uses **snap-to-rational**: round each rotation-matrix coefficient and translation component to a denominator 2³² rational, then certify strict containment against the snapped transform. The candidate is rejected unless the snapped containment is also strictly positive.
 
-- **Snap-to-rational.** Round each quaternion component to a denominator ≤ 2³² rational (continued fraction). Then certify in exact arithmetic against the *snapped* quaternion. The candidate is rejected unless the snapped clearance is also strictly positive — strictly stronger than IntervalSnap.
-- **Range-rational.** Represent each quaternion component as the rational interval `[next_down(f), next_up(f)]` and propagate. Loses the "exact" promise but avoids rounding errors at the snap step.
+**Why.** For cube/tet/octa/triakis the leaderboard's `cert` column can show `exact` for the strongest tier — a meaningful integrity signal. The noperthedron itself has trigonometric rotated vertices, so it remains an `IntervalSnap` verifier target.
 
-**Why.** Two payoffs. (1) The headline noperthedron regression — currently empirical at 50 000 evals — would graduate to "no candidate (after f64-to-rational snap) certifies a passage in exact rational arithmetic". The snap step has provable error bounds: a candidate that's *truly* a passage is preserved, a candidate that's an f64 rounding artifact is rejected. (2) For cube/tet/octa the leaderboard's `cert` column would show `exact` for the strongest tier — a meaningful integrity signal.
-
-**Crate(s)**: `rupert-verify` (+ feature-gate plumbing in `rupert-core` to expose `Expr::eval_rational`).
+**Crate(s)**: `rupert-verify` and `rupert-core`.
 
 **Estimated effort**: 400 LOC.
 
-**Risk**: low. Algorithm is straightforward; the only design choice is snap-vs-range. Recommendation: snap, with an interval-arithmetic guard that the snap doesn't change combinatorial structure of the hull.
+**Risk**: low. The remaining hardening item is adding an interval-arithmetic guard that the snap doesn't change combinatorial structure of the hull.
 
 ### v0.3.0 — Update noperthedron headline regression
 
-**Status**: pending. Depends on `certify_exact` *or* the existing `certify_interval` (whichever lands first).
+**Status**: shipped semantically through the runner/verifier path: solver-reported candidates only become `Solved` if the strongest available verifier accepts them.
 
 **What.** The current `noperthedron_resists_every_v1_solver` test in `rupert-bench` runs every solver × 3 seeds × 50k evals and asserts `RunOutcome::Solved` never appears. Replace the assertion with: "if any solver returns Found, certify_interval (or certify_exact) MUST reject it."
 
@@ -159,11 +158,11 @@ These don't require new code — just patience, compute, and willingness to comm
 
 ### E1 — Snub cube blitz
 
-**What.** Run `patch_aware` v0.2.0 with `--budget-evals 10_000_000` per (seed, cell-priority-order). Stratify across 16 seeds. Total: ~160M evaluations. Estimated wall time: 12–24 hours on a 32-core machine.
+**What.** Run `patch_aware` v0.3.0 with `--budget-evals 10_000_000` per seed. Stratify across 16 seeds. Total: ~160M evaluations. Estimated wall time: 12–24 hours on a 32-core machine.
 
 **Goal.** Find a positive-clearance candidate for the snub cube. Open since arXiv:2112.13754.
 
-**Risk.** If patch_aware v0.2.0 still resists at 10M evals/seed, that's a strong empirical lower bound on the difficulty — and motivation to land v0.3.0's branch-and-bound.
+**Risk.** If patch_aware v0.3.0 still resists at 10M evals/seed, that's a strong empirical lower bound on the difficulty — and motivation to tighten the interval branch-and-bound hook.
 
 **What to record.** Best clearance per cell across all seeds; histogram of best-clearance-per-cell distribution; identify any cell whose best clearance is consistently within 0.01 of zero (those are the "near-miss" candidates worth refining).
 
@@ -183,7 +182,7 @@ These don't require new code — just patience, compute, and willingness to comm
 
 ### E4 — Noperthedron formal cover
 
-**What.** Once `certify_exact` lands (v0.3.0), run a sweep of N=1M random rotation pairs against the noperthedron and verify every single one is rejected by IntervalSnap (and ExactRational where applicable).
+**What.** Run a sweep of N=1M random rotation pairs against the noperthedron and verify every single one is rejected by IntervalSnap.
 
 **Goal.** Empirical confidence margin: at 1M random candidates, the false-positive rate is < 1ppm. Combined with the formal interval-arithmetic certificate from the paper, this is the strongest possible robustness story.
 
@@ -233,7 +232,7 @@ These don't require new code — just patience, compute, and willingness to comm
 
 ## Triggers for starting each track
 
-- **v0.3.0 branch-and-bound**: trigger when patch_aware v0.2.0 stalls on the snub cube at 10M+ evals (E1 result). The branch-and-bound work pays off only if there's a real reduction signal to chase.
+- **Tight interval branch-and-bound**: trigger when patch_aware v0.3.0 stalls on the snub cube at 10M+ evals (E1 result). The branch-and-bound work pays off only if there's a real reduction signal to chase.
 - **`certify_exact`**: trigger when (a) someone proposes a shape with rational vertices that we want to certify rigorously, OR (b) the headline noperthedron regression starts to feel inadequate (e.g. someone publishes a near-miss attack).
 - **LP scale oracle**: trigger when any solver's translation search dominates its eval cost (visible in profiler).
 - **GPU**: trigger when any experiment in this list takes > 1 week wall time on commodity hardware.

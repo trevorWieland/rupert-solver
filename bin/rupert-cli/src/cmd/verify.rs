@@ -5,8 +5,8 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use rupert_core::{RunOutcome, RunResult};
-use rupert_verify::certify;
+use rupert_core::{Certification, RunOutcome, RunResult, Solution};
+use rupert_verify::{VerifyError, certify, certify_exact, certify_interval};
 
 #[derive(clap::Args, Debug)]
 pub(crate) struct VerifyArgs {
@@ -94,7 +94,7 @@ fn process_file(path: &PathBuf) -> Result<UpdateStats> {
         let Some(poly) = rupert_shapes::lookup(&r.poly_name) else {
             continue;
         };
-        match certify(sol, &poly) {
+        match strongest_certification(sol, &poly) {
             Ok(cert) => {
                 sol.certification = Some(cert);
                 stats.promoted += 1;
@@ -106,6 +106,15 @@ fn process_file(path: &PathBuf) -> Result<UpdateStats> {
                 stats.disqualified += 1;
             }
         }
+        if let Some(obs) = r.best_positive.as_mut() {
+            let obs_sol = Solution {
+                candidate: obs.candidate,
+                clearance: obs.clearance,
+                found_at_eval: obs.observed_at_eval,
+                certification: None,
+            };
+            obs.certification = strongest_certification(&obs_sol, &poly).ok();
+        }
     }
     let mut buf: Vec<u8> = Vec::with_capacity(bytes.len() + 64);
     for r in &lines {
@@ -115,4 +124,23 @@ fn process_file(path: &PathBuf) -> Result<UpdateStats> {
     }
     std::fs::write(path, &buf).with_context(|| format!("write {}", path.display()))?;
     Ok(stats)
+}
+
+fn strongest_certification(
+    sol: &Solution,
+    poly: &rupert_core::Polyhedron,
+) -> Result<Certification, VerifyError> {
+    if let Ok(cert) = certify_exact(sol, poly) {
+        return Ok(cert);
+    }
+
+    let interval_attempt = if poly.exact_vertices.is_some() {
+        certify_interval(sol, poly).ok()
+    } else {
+        None
+    };
+    match interval_attempt {
+        Some(cert) => Ok(cert),
+        None => certify(sol, poly),
+    }
 }

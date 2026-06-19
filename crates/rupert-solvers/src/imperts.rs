@@ -7,13 +7,13 @@
 //!
 //! ## What `imperts` is
 //!
-//! Refinement solver — given an existing positive-clearance seed,
+//! Refinement solver — given an existing good seed,
 //! search a box of `(Δq_outer, Δq_inner, Δt)` deltas around the seed
 //! and accept strictly-improving steps. The upstream binary pulls seeds
 //! from a SQLite database produced by `ruperts.cc` (the discovery
 //! engine). Our [`Solver`] trait doesn't take a seed, so we
-//! self-bootstrap: random-quaternion search until a first
-//! positive-clearance candidate, then the refinement loop.
+//! self-bootstrap: random-quaternion search keeps the best near-miss
+//! candidate, then the refinement loop tries to cross zero.
 //!
 //! ## Faithful-port story
 //!
@@ -72,7 +72,7 @@ impl Solver for Imperts {
     }
 
     fn version(&self) -> &'static str {
-        "0.2.0"
+        "0.3.0"
     }
 
     fn solve(
@@ -87,7 +87,7 @@ impl Solver for Imperts {
         // Phase 1 — bootstrap a seed via random unit-quaternion search.
         let Some((mut best_candidate, mut best_clearance)) = bootstrap_seed(ec, &mut rng, max)
         else {
-            return SolverOutcome::Exhausted;
+            return SolverOutcome::exhausted();
         };
 
         // Phase 2 — Tom 7's outer refinement loop. Each outer iter runs
@@ -134,14 +134,14 @@ impl Solver for Imperts {
         }
 
         if best_clearance.is_finite() && best_clearance > 0.0 {
-            SolverOutcome::Found(Solution {
+            SolverOutcome::found(Solution {
                 candidate: best_candidate,
                 clearance: best_clearance,
                 found_at_eval: ec.count(),
                 certification: None,
             })
         } else {
-            SolverOutcome::Exhausted
+            SolverOutcome::exhausted()
         }
     }
 }
@@ -152,6 +152,7 @@ fn bootstrap_seed<R: Rng + ?Sized>(
     max_evals: u64,
 ) -> Option<(Candidate, f64)> {
     let bootstrap_cap = ec.count().saturating_add(MAX_SEED_ATTEMPTS).min(max_evals);
+    let mut best: Option<(Candidate, f64)> = None;
     while ec.count() < bootstrap_cap {
         let candidate = Candidate {
             outer: random_unit_quat(rng),
@@ -159,11 +160,18 @@ fn bootstrap_seed<R: Rng + ?Sized>(
             translation: [0.0, 0.0],
         };
         let c = ec.evaluate(&candidate);
-        if c.is_finite() && c > 0.0 {
-            return Some((candidate, c));
+        if !c.is_finite() {
+            continue;
+        }
+        match best {
+            Some((_, best_c)) if c <= best_c => {}
+            _ => best = Some((candidate, c)),
+        }
+        if c > 0.0 {
+            return best;
         }
     }
-    None
+    best
 }
 
 #[cfg(test)]
@@ -187,7 +195,7 @@ mod tests {
         let mut ec = EvalCounter::new(&p);
         let outcome = solver.solve(&p, &budget(150_000, 0), &mut ec);
         assert!(
-            matches!(outcome, SolverOutcome::Found(_)),
+            matches!(outcome, SolverOutcome::Found { .. }),
             "got {outcome:?}"
         );
     }
@@ -202,7 +210,7 @@ mod tests {
         let mut ec = EvalCounter::new(&p);
         let outcome = solver.solve(&p, &budget(200_000, 17), &mut ec);
         match outcome {
-            SolverOutcome::Found(sol) => {
+            SolverOutcome::Found { solution: sol, .. } => {
                 assert!(
                     sol.clearance > 0.05,
                     "imperts cube clearance {} ≤ refinement target",

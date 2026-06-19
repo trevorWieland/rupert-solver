@@ -47,6 +47,10 @@ fn fake_run(
         outcome,
         eval_count: evals,
         wall_time_ms: 1,
+        best_positive: None,
+        best_near_miss: None,
+        best_boundary: None,
+        telemetry: None,
         solution: Some(Solution {
             candidate: Candidate::IDENTITY,
             clearance,
@@ -73,6 +77,7 @@ async fn four_sections(w: &mut LeadWorld) {
     assert!(s.contains("## Headline"));
     assert!(s.contains("## Highest clearance"));
     assert!(s.contains("## Uncertified candidates"));
+    assert!(s.contains("## Open best observations"));
     assert!(s.contains("## Open problems"));
 }
 

@@ -19,7 +19,7 @@ satisfy
 - Inner translation lives in the **xy plane** of the *projection*, not in 3D — the inner copy slides through along `+z`.
 - Both copies are the **same size**. The classical Prince Rupert problem is "same-size cubes".
 
-The `Candidate` type carries `outer: Quat`, `inner: Quat`, `translation: [f64; 2]`. v1 keeps translation as a free search variable; v2 may add a per-rotation-pair LP that recovers the optimal translation as the 2D Chebyshev center of `outer_hull ⊖ inner_hull` (Zeng 2026).
+The `Candidate` type carries `outer: Quat`, `inner: Quat`, `translation: [f64; 2]`. Translation is currently a free search variable; the roadmap may add a per-rotation-pair LP that recovers the optimal translation as the 2D Chebyshev center of `outer_hull ⊖ inner_hull` (Zeng 2026).
 
 ## Clearance metric
 
@@ -35,7 +35,7 @@ A `Solution` is "found" if the f64 clearance is `> 0`. A solution is "certified"
 
 For a convex polyhedron, the orthographic shadow's boundary is the convex hull of the projected vertices. So `clearance` only needs the outer's projected vertices (no face data); the inner just contributes its projected vertex set.
 
-This means **face data is optional** in the Polyhedron struct. Builtin shapes that ship without faces (snub cube, noperthedron in v1) still work for clearance evaluation. They're only restricted from solvers that genuinely need face data (`face_normal_pairs` enumerates face centroids from the face list — when faces are empty, only vertex and edge-midpoint enumerations contribute).
+This means **face data is optional** in the Polyhedron struct for clearance evaluation. The shipped builtins include face data, and solvers that use faces (`face_normal_pairs`, `patch_aware`) get better direction/cell enumerations from it.
 
 ## Why the cube can pass through itself
 
@@ -45,7 +45,7 @@ This is why `face_normal_pairs` enumerates not just vertex/face/edge directions 
 
 ## Symmetry and search
 
-For the centrally-symmetric builtins we ship in v1 (cube, tetra, octa, dodec, icos), the optimal translation is near origin. Random sampling of translation hurts more than it helps, so `random_quat` uses translation `(0, 0)` and lets `random_then_refine`'s phase-2 coordinate-descent recover translation when needed.
+For many regular builtins, the optimal translation is near origin. Random sampling of translation hurts more than it helps, so `random_quat` uses translation `(0, 0)` and lets `random_then_refine`'s phase-2 coordinate-descent recover translation when needed.
 
 ## References
 

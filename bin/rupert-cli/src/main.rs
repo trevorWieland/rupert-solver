@@ -18,6 +18,8 @@ struct Cli {
 
 #[derive(Parser, Debug)]
 enum Command {
+    /// Analyze stored experiment results.
+    Analyze(cmd::analyze::AnalyzeArgs),
     /// List shapes or solvers.
     List(cmd::list::ListArgs),
     /// Run one or more solver/shape/seed triples.
@@ -34,6 +36,7 @@ fn main() -> Result<()> {
         .init();
     let cli = Cli::parse();
     match cli.command {
+        Command::Analyze(args) => cmd::analyze::run(&args),
         Command::List(args) => cmd::list::run(&args),
         Command::Run(args) => cmd::run::run(&args),
         Command::Verify(args) => cmd::verify::run(&args),

@@ -16,6 +16,7 @@ pub mod icosahedron;
 pub mod io;
 pub mod noperthedron;
 pub mod octahedron;
+pub mod pentagonal_icositetrahedron;
 pub mod snub_cube;
 pub mod tetrahedron;
 pub mod triakis_tetrahedron;
@@ -26,6 +27,7 @@ pub use icosahedron::icosahedron;
 pub use io::{IoError, load_json, save_json};
 pub use noperthedron::noperthedron;
 pub use octahedron::octahedron;
+pub use pentagonal_icositetrahedron::pentagonal_icositetrahedron;
 pub use snub_cube::snub_cube;
 pub use tetrahedron::tetrahedron;
 pub use triakis_tetrahedron::triakis_tetrahedron;
@@ -42,6 +44,7 @@ pub fn builtins() -> Vec<Polyhedron> {
         dodecahedron(),
         icosahedron(),
         triakis_tetrahedron(),
+        pentagonal_icositetrahedron(),
         snub_cube(),
         noperthedron(),
     ]
@@ -64,7 +67,9 @@ pub fn rotation_group_for(name: &str) -> Vec<Quat> {
     };
     match name {
         "tetrahedron" | "triakis_tetrahedron" => tetrahedral_rotation_group(),
-        "cube" | "octahedron" | "snub_cube" => octahedral_rotation_group(),
+        "cube" | "octahedron" | "snub_cube" | "pentagonal_icositetrahedron" => {
+            octahedral_rotation_group()
+        }
         "icosahedron" => icosahedral_rotation_group(),
         "dodecahedron" => dodecahedral_rotation_group(),
         _ => vec![Quat::IDENTITY],
@@ -130,8 +135,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn eight_builtins() {
-        assert_eq!(builtins().len(), 8);
+    fn nine_builtins() {
+        assert_eq!(builtins().len(), 9);
     }
 
     #[test]

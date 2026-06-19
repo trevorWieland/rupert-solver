@@ -55,7 +55,7 @@ impl Solver for FaceNormalPairs {
         for q_outer in &quats {
             for q_inner in &quats {
                 if ec.count() >= max {
-                    return SolverOutcome::Exhausted;
+                    return SolverOutcome::exhausted();
                 }
                 let candidate = Candidate {
                     outer: *q_outer,
@@ -64,7 +64,7 @@ impl Solver for FaceNormalPairs {
                 };
                 let c = ec.evaluate(&candidate);
                 if c.is_finite() && c > 0.0 {
-                    return SolverOutcome::Found(Solution {
+                    return SolverOutcome::found(Solution {
                         candidate,
                         clearance: c,
                         found_at_eval: ec.count(),
@@ -73,15 +73,14 @@ impl Solver for FaceNormalPairs {
                 }
             }
         }
-        SolverOutcome::Exhausted
+        SolverOutcome::exhausted()
     }
 }
 
 const IN_PLANE_STEPS: usize = 12;
 
 /// Build the enumeration set: vertices ∪ face centroids ∪ edge midpoints.
-/// For shapes shipped with empty faces (snub_cube, noperthedron in v1),
-/// only vertices contribute.
+/// If a custom shape has empty faces, only vertices contribute.
 fn collect_directions(poly: &Polyhedron) -> Vec<Vec3> {
     let mut out: Vec<Vec3> = Vec::with_capacity(poly.vertices.len() + poly.faces.len() * 2);
     out.extend(poly.vertices.iter().copied());
@@ -164,7 +163,7 @@ mod tests {
         let mut ec = EvalCounter::new(&p);
         let outcome = solver.solve(&p, &budget(110_000, 0), &mut ec);
         assert!(
-            matches!(outcome, SolverOutcome::Found(_)),
+            matches!(outcome, SolverOutcome::Found { .. }),
             "expected cube solution, got {outcome:?}"
         );
     }

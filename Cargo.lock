@@ -1288,6 +1288,7 @@ dependencies = [
  "blake3",
  "inari",
  "insta",
+ "malachite",
  "proptest",
  "serde",
  "serde_json",
@@ -1322,6 +1323,7 @@ dependencies = [
 name = "rupert-solvers"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "proptest",
  "rand 0.8.6",
  "rand_xoshiro",

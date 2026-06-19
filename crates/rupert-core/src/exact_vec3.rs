@@ -36,6 +36,15 @@ impl ExactVec3 {
     pub fn eval_f64(&self) -> Vec3 {
         Vec3::new(self.x.eval_f64(), self.y.eval_f64(), self.z.eval_f64())
     }
+
+    #[must_use]
+    pub fn eval_rational(&self) -> Option<[malachite::Rational; 3]> {
+        Some([
+            self.x.eval_rational()?,
+            self.y.eval_rational()?,
+            self.z.eval_rational()?,
+        ])
+    }
 }
 
 #[cfg(test)]

@@ -7,13 +7,10 @@
 //! authors' reference implementation:
 //! <https://github.com/Jakob256/Rupert/blob/main/src/noperthedron.py>
 //!
-//! **Caveat.** v1 stores seeds as `f64` (rounded from the exact rationals
-//! below). Solvers see a polyhedron whose `f64` coordinates are within
-//! ~1 ULP of the paper's. Empirical search confirms no v1 solver finds
-//! a passage within 100 000 evaluations (regression test below). The
-//! formal proof of non-Rupertness in the paper relies on rational
-//! arithmetic + interval bounds for the irrational rotation matrix
-//! `R_z(2π/15)`; v2 will wire `rupert-verify` to the exact path.
+//! Solvers see f64 coordinates derived from the exact symbolic vertex
+//! table. The verifier uses the symbolic table for IntervalSnap, matching
+//! the paper's reliance on rational seeds plus interval bounds for the
+//! irrational rotation matrix `R_z(2π/15)`.
 
 use rupert_core::{ExactVec3, Expr, Polyhedron, Vec3};
 

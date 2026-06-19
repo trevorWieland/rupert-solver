@@ -37,7 +37,7 @@ impl Solver for HopfGrid {
         for outer_q in &grid {
             for inner_q in &grid {
                 if ec.count() >= max {
-                    return SolverOutcome::Exhausted;
+                    return SolverOutcome::exhausted();
                 }
                 let candidate = Candidate {
                     outer: *outer_q,
@@ -46,7 +46,7 @@ impl Solver for HopfGrid {
                 };
                 let c = ec.evaluate(&candidate);
                 if c.is_finite() && c > 0.0 {
-                    return SolverOutcome::Found(Solution {
+                    return SolverOutcome::found(Solution {
                         candidate,
                         clearance: c,
                         found_at_eval: ec.count(),
@@ -55,7 +55,7 @@ impl Solver for HopfGrid {
                 }
             }
         }
-        SolverOutcome::Exhausted
+        SolverOutcome::exhausted()
     }
 }
 
@@ -128,7 +128,7 @@ mod tests {
         // earlier; budget at 10k.
         let outcome = solver.solve(&p, &budget(10_000, 0), &mut ec);
         assert!(
-            matches!(outcome, SolverOutcome::Found(_)),
+            matches!(outcome, SolverOutcome::Found { .. }),
             "got {outcome:?}"
         );
     }

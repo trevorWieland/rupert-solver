@@ -34,7 +34,7 @@ impl Solver for RandomThenRefine {
         // candidate that's "close" (clearance ≥ NEAR_BASIN_THRESHOLD).
         loop {
             if ec.count() >= max {
-                return SolverOutcome::Exhausted;
+                return SolverOutcome::exhausted();
             }
             let candidate = Candidate {
                 outer: random_unit_quat(&mut rng),
@@ -46,7 +46,7 @@ impl Solver for RandomThenRefine {
                 continue;
             }
             if c > 0.0 {
-                return SolverOutcome::Found(Solution {
+                return SolverOutcome::found(Solution {
                     candidate,
                     clearance: c,
                     found_at_eval: ec.count(),
@@ -55,7 +55,7 @@ impl Solver for RandomThenRefine {
             }
             if c >= NEAR_BASIN_THRESHOLD {
                 if let Some(sol) = local_refine(ec, candidate, max) {
-                    return SolverOutcome::Found(sol);
+                    return SolverOutcome::found(sol);
                 }
             }
         }
@@ -137,7 +137,7 @@ mod tests {
             let mut solver = RandomThenRefine;
             let mut ec = EvalCounter::new(&p);
             let outcome = solver.solve(&p, &budget(5_000, seed), &mut ec);
-            if matches!(outcome, SolverOutcome::Found(_)) {
+            if matches!(outcome, SolverOutcome::Found { .. }) {
                 hits += 1;
             }
         }

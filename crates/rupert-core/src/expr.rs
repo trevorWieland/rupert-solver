@@ -1,9 +1,9 @@
 //! Symbolic algebraic expressions.
 //!
 //! v2 Phase 1: closed primitive set per `docs/v2-algebraic-coords.md`.
-//! Only the f64 evaluator is wired; interval (`inari`) and rational
-//! (`malachite`) evaluators arrive in later phases gated behind
-//! corresponding feature flags.
+//! The f64, interval (`inari`), and rational (`malachite`) evaluators
+//! are compiled unconditionally. Non-rational primitives return `None`
+//! from the rational evaluator.
 //!
 //! ## Design constraints
 //!
@@ -22,8 +22,7 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /// Symbolic algebraic expression. f64 evaluation is total (always finite
-/// for any well-formed expression). Interval and exact-rational evaluators
-/// arrive in later v2 phases.
+/// for any well-formed expression).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     /// Rational number `numerator / denominator`. Stored unreduced; the
@@ -137,6 +136,26 @@ impl Expr {
             Self::Mul(a, b) => a.eval_f64() * b.eval_f64(),
             Self::Div(a, b) => a.eval_f64() / b.eval_f64(),
             Self::Neg(e) => -e.eval_f64(),
+        }
+    }
+
+    #[must_use]
+    pub fn eval_rational(&self) -> Option<malachite::Rational> {
+        use malachite::Rational;
+
+        match self {
+            Self::Rational(n, d) => Some(Rational::from_signeds(*n, *d)),
+            Self::Add(a, b) => Some(a.eval_rational()? + b.eval_rational()?),
+            Self::Sub(a, b) => Some(a.eval_rational()? - b.eval_rational()?),
+            Self::Mul(a, b) => Some(a.eval_rational()? * b.eval_rational()?),
+            Self::Div(a, b) => Some(a.eval_rational()? / b.eval_rational()?),
+            Self::Neg(e) => Some(-e.eval_rational()?),
+            Self::Sqrt(_)
+            | Self::GoldenRatio
+            | Self::Tribonacci
+            | Self::Cos(_)
+            | Self::Sin(_)
+            | Self::Pi => None,
         }
     }
 }
@@ -333,5 +352,13 @@ mod tests {
         let z = Expr::int(210_152_163) / den;
         let norm_sq = x.clone() * x + y.clone() * y + z.clone() * z;
         assert!(approx(norm_sq.eval_f64(), 1.0, 1e-15));
+    }
+
+    #[test]
+    fn rational_eval_rejects_non_rational_primitives() {
+        assert!(Expr::rat(3, 4).eval_rational().is_some());
+        assert!(Expr::golden_ratio().eval_rational().is_none());
+        assert!(Expr::tribonacci().eval_rational().is_none());
+        assert!(Expr::pi().eval_rational().is_none());
     }
 }
